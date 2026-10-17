@@ -1,0 +1,25 @@
+# XcodeGen spec — run `xcodegen generate` in this folder to create OXStomp.xcodeproj
+name: OXStomp
+options:
+  bundleIdPrefix: com.jay
+  deploymentTarget:
+    iOS: "16.0"
+targets:
+  OXStomp:
+    type: application
+    platform: iOS
+    sources:
+      - path: OXStomp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jay.oxstomp
+        PRODUCT_NAME: OX Stomp
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_CFBundleDisplayName: OX Stomp
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        CODE_SIGN_STYLE: Automatic

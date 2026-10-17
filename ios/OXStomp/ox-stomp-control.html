@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OX Stomp Control</title>
+<meta name="theme-color" content="#141210">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="OX Stomp">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+:root{
+  --bg:#141210; --panel:#1f1b17; --panel2:#29241e; --line:#3a3229;
+  --text:#efe6d8; --muted:#a8998a; --accent:#d9a441; --accent2:#c0553a; --ok:#6fae6a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:5;background:linear-gradient(#1b1714,#141210);border-bottom:1px solid var(--line);padding:12px 16px;padding-top:max(12px,env(safe-area-inset-top))}
+.brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.brand h1{margin:0;font-size:20px;letter-spacing:.06em;text-transform:uppercase}
+.brand h1 span{color:var(--accent)}
+.status{font-size:13px;color:var(--muted)}
+.status.ok{color:var(--ok)} .status.err{color:var(--accent2)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+select,input[type=number],button{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit}
+button{cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);color:#1a1408;border-color:var(--accent);font-weight:600}
+button.on{background:var(--accent);color:#1a1408;border-color:var(--accent)}
+main{max-width:1100px;margin:0 auto;padding:16px;display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(310px,1fr))}
+section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+section h2{margin:0 0 10px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+.row{display:grid;grid-template-columns:110px 1fr 76px;gap:8px;align-items:center;margin:8px 0}
+.row label{color:var(--muted);font-size:13px}
+.row .val{text-align:right;font-variant-numeric:tabular-nums;font-size:13px}
+.row select{width:100%}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.toggles{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.toggles button{font-size:13px;padding:6px 10px}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.cc{color:#6f6458;font-size:11px;margin-left:4px}
+#log{grid-column:1/-1;font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--muted);max-height:160px;overflow:auto;white-space:pre-wrap}
+.note{font-size:12px;color:var(--muted);margin:6px 0 0}
+.rigs{display:grid;gap:8px}
+.rig{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;grid-template-columns:1fr auto;gap:6px 10px;align-items:center}
+.rig b{font-size:14px}.rig .meta{font-size:12px;color:var(--muted);grid-column:1/-1}
+.rig .acts{display:flex;gap:6px}
+.eqgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px 14px;margin-top:8px}
+.eqgrid label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
+.eqgrid input,.eqgrid select{width:100%}
+.eqgrid input[type=text]{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit}
+.badge{display:inline-block;font-size:11px;padding:2px 6px;border-radius:6px;background:#3a2a1c;color:var(--accent);margin-left:6px}
+.tag{font-size:10px;margin-left:5px;padding:1px 5px;border-radius:5px;vertical-align:1px}
+.tag.rig{background:#2b3440;color:#9db8d6}
+.row.nomidi input[type=range]{accent-color:#7f9cc0}
+button.nomidi.on{background:#7f9cc0;border-color:#7f9cc0;color:#0f1620}
+input[type=range]:disabled{opacity:.45}
+@media (max-width:480px){.row{grid-template-columns:84px 1fr 70px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><h1>OX <span>Stomp</span> Control</h1><span id="status" class="status">Not connected</span></div>
+  <div class="bar">
+    <button id="connect" class="primary">Connect MIDI</button>
+    <select id="output" title="MIDI output"><option value="">— no output —</option></select>
+    <label class="status">Ch <select id="channel"></select></label>
+    <button id="sendAll" title="Send every value on screen to the pedal">Send all</button>
+    <select id="snapList" title="Saved snapshots"><option value="">Snapshots…</option></select>
+    <button id="snapLoad">Load</button>
+    <button id="snapSave">Save</button>
+    <button id="snapDel">Delete</button>
+    <button id="exportBtn">Export</button>
+    <button id="importBtn">Import</button>
+    <input id="importFile" type="file" accept=".json" hidden>
+  </div>
+</header>
+<main id="main"></main>
+
+<script>
+// ---- Parameter map: UA OX Stomp manual, "OX Stomp MIDI CCs" (firmware 2.0+) ----
+const CABS = ["1x10 Black Cha","1x12 Black GB30","1x12 Black D-UX","1x12 JBG125","1x12 Blu 15","1x12 GB25","1x12 Blue J","2x10 V-UX","2x12 Ace Top","2x12 Alnico 50","2x12 Black 8h","2x12 D65","2x12 Two Verb","2x12 JBF120","4x10 BMan","4x12 GB30",
+  // 16–21: UA's CC table is truncated after 15; these follow the manual's cabinet list order — verify on the pedal
+  "4x12 UK Vee 30 (16?)","4x12 CA Vee 30 (17?)","4x12 Super 80 (18?)","4x12 GB25 Punch (19?)","4x12 GB25 Thick (20?)","4x12 White 75 (21?)"];
+const MICS = ["Dynamic 421","Dynamic 57","Condenser 414","Ribbon 160","Ribbon 121","Condenser 67","Direct Box"];
+const ROOMS = ["Condenser Stereo","Ribbon Stereo","Condenser Mono","Condenser 67 Mono","Ribbon 84 Mono","Ribbon 121 Mono"];
+
+const SECTIONS = [
+  {title:"Rig & Master", params:[
+    {id:"output",cc:7,label:"Output",type:"range",def:96,unit:"pct"},
+    {id:"drive",cc:21,label:"Speaker Drive",type:"range",def:40,unit:"pct"},
+    {id:"cab",cc:20,label:"Cabinet",type:"select",options:CABS,def:15},
+  ]},
+  {title:"Mic 1", params:[
+    {id:"m1",cc:22,label:"Model",type:"select",options:MICS,def:1},
+    {id:"m1vol",cc:23,label:"Volume",type:"range",def:96,unit:"pct"},
+    {id:"m1pan",cc:24,label:"Pan",type:"range",def:64,pan:true},
+    {id:"m1mute",cc:25,label:"Mute",type:"toggle",def:0},
+    {id:"m1axis",cc:26,label:"On Axis",type:"toggle",def:1},
+    {id:"m1lc",cc:27,label:"Low Cut",type:"toggle",def:0},
+  ]},
+  {title:"Mic 2", params:[
+    {id:"m2",cc:28,label:"Model",type:"select",options:MICS,def:4},
+    {id:"m2vol",cc:29,label:"Volume",type:"range",def:80,unit:"pct"},
+    {id:"m2pan",cc:30,label:"Pan",type:"range",def:64,pan:true},
+    {id:"m2mute",cc:31,label:"Mute",type:"toggle",def:0},
+    {id:"m2axis",cc:32,label:"On Axis",type:"toggle",def:1},
+    {id:"m2lc",cc:33,label:"Low Cut",type:"toggle",def:0},
+  ]},
+  {title:"Room", params:[
+    {id:"room",cc:34,label:"Room Mic",type:"select",options:ROOMS,def:0},
+    {id:"roomlvl",cc:35,label:"Level",type:"range",def:40,unit:"pct"},
+    {id:"roompan",cc:36,label:"Pan",type:"range",def:64,pan:true},
+    {id:"roommute",cc:37,label:"Mute",type:"toggle",def:0},
+    {id:"roomdamp",cc:38,label:"Damp",type:"toggle",def:0},
+    {id:"roomlc",cc:39,label:"Low Cut",type:"toggle",def:0},
+  ]},
+  {title:"Master EQ", note:"Post-cabinet EQ for the whole Rig, laid out like UAFX Control. Band frequencies for the Default Rig: Low 120 Hz · Low-Mid 400 Hz · Mid 900 Hz · High 4 kHz (they vary per Rig and the app doesn't expose them).", params:[
+    {id:"eqon",label:"Master EQ",type:"toggle",def:1,nomidi:true},
+    {id:"eqhigh",label:"High · 4k",type:"range",def:64,unit:"db10",nomidi:true},
+    {id:"eqmid",label:"Mid · 900",type:"range",def:64,unit:"db10",nomidi:true},
+    {id:"eqlomid",label:"Low-Mid · 400",type:"range",def:64,unit:"db10",nomidi:true},
+    {id:"eqlow",label:"Low · 120",type:"range",def:64,unit:"db10",nomidi:true},
+    {id:"eqhion",label:"High band",type:"toggle",def:1,nomidi:true},
+    {id:"eqmidon",label:"Mid band",type:"toggle",def:1,nomidi:true},
+    {id:"eqlomidon",label:"Low-Mid band",type:"toggle",def:1,nomidi:true},
+    {id:"eqlowon",label:"Low band",type:"toggle",def:1,nomidi:true},
+    {id:"eqhicut",label:"High Cut",type:"range",def:127,unit:"hiCut",nomidi:true},
+    {id:"eqlocut",label:"Low Cut",type:"range",def:0,unit:"loCut",nomidi:true},
+  ]},
+  {title:"1176 Compressor", note:"Applied to the whole Rig. As on a real 1176, Attack and Release get faster as the number goes up.", params:[
+    {id:"cmpon",label:"Compressor",type:"toggle",def:0,nomidi:true},
+    {id:"cmpin",label:"Input",type:"range",def:48,unit:"pct",nomidi:true},
+    {id:"cmpout",label:"Output",type:"range",def:64,unit:"pct",nomidi:true},
+    {id:"cmpatk",label:"Attack",type:"range",def:64,unit:"atk1176",nomidi:true},
+    {id:"cmprel",label:"Release",type:"range",def:64,unit:"rel1176",nomidi:true},
+    {id:"cmpratio",label:"Ratio",type:"select",options:["4:1","8:1","12:1","20:1","All"],def:0,nomidi:true},
+  ]},
+  {title:"Delay", note:"Full delay layout from UAFX Control. Controls tagged CC change the pedal live; controls tagged Rig have no MIDI CC, so set them in UAFX Control and save the Rig — values here are kept with your snapshots as a record.", params:[
+    {id:"dly",cc:40,label:"Enable",type:"toggle",def:1},
+    {id:"dmode",label:"Mode",type:"select",options:["Dual","Crossover","Ping Pong","Chorus","Flanger"],def:0,nomidi:true},
+    {id:"dlytime",cc:41,label:"Time A",type:"range",def:22,unit:"delayTime"},
+    {id:"dlytimeb",label:"Time B",type:"range",def:22,unit:"delayTime",nomidi:true,linkedTo:"dlytime",linkKey:"dlink"},
+    {id:"dlink",label:"Link Delay Times",type:"toggle",def:1,nomidi:true},
+    {id:"dpana",label:"Pan A",type:"range",def:0,pan:true,nomidi:true},
+    {id:"dpanb",label:"Pan B",type:"range",def:127,pan:true,nomidi:true,mirrorOf:"dpana",linkKey:"dlinkpan"},
+    {id:"dlinkpan",label:"Link Pan",type:"toggle",def:1,nomidi:true},
+    {id:"dlyfb",cc:42,label:"Feedback",type:"range",def:88,unit:"bipolar"},
+    {id:"dlymix",cc:44,label:"Mix",type:"range",def:74,unit:"bipolar"},
+    {id:"dlfo",label:"LFO Shape",type:"select",options:["Sine 0","Sine 90","Sine 180","Tri 0","Tri 90","Tri 180"],def:0,nomidi:true},
+    {id:"dmodrate",label:"Mod Rate",type:"range",def:0,unit:"offPct",nomidi:true},
+    {id:"dmoddepth",label:"Mod Depth",type:"range",def:0,unit:"offPct",nomidi:true},
+    {id:"dhicut",label:"High Cut",type:"range",def:99,unit:"hiCut",nomidi:true},
+    {id:"dlocut",label:"Low Cut",type:"range",def:40,unit:"loCut",nomidi:true},
+  ]},
+  {title:"Reverb", note:"Stereo plate reverb on the whole Rig. UA notes the Mix control is 15% wet at its halfway point for finer low-level control.", params:[
+    {id:"rev",cc:60,label:"Enable",type:"toggle",def:0},
+    {id:"revtime",cc:61,label:"Decay",type:"range",def:50,unit:"pct"},
+    {id:"revbal",label:"Balance",type:"range",def:64,pan:true,nomidi:true},
+    {id:"revmix",cc:63,label:"Mix",type:"range",def:40,unit:"revMix"},
+    {id:"revtreb",label:"Treble",type:"range",def:64,unit:"bipolar",nomidi:true},
+    {id:"revbass",label:"Bass",type:"range",def:64,unit:"bipolar",nomidi:true},
+  ]},
+];
+const PARAMS = SECTIONS.flatMap(s=>s.params);
+const state = {pc:null, bypass:1};
+PARAMS.forEach(p=>state[p.id]=p.def);
+
+// ---- MIDI ----
+let midi=null, out=null;
+const $ = id=>document.getElementById(id);
+const chSel=$("channel");
+for(let i=1;i<=16;i++) chSel.add(new Option(i,i-1));
+try{const c=localStorage.getItem("oxStompChannel");if(c!==null)chSel.value=c;}catch{}
+chSel.onchange=()=>{try{localStorage.setItem("oxStompChannel",chSel.value);}catch{}};
+function setStatus(t,cls){const s=$("status");s.textContent=t;s.className="status "+(cls||"");}
+function log(t){const l=$("log");l.textContent=(new Date().toLocaleTimeString()+"  "+t+"\n"+l.textContent).slice(0,6000);}
+function ch(){return Number(chSel.value)||0;}
+function sendCC(cc,v,label){
+  v=Math.max(0,Math.min(127,Math.round(v)));
+  if(!out){log(`(not sent) CC${cc}=${v} ${label||""}`);return;}
+  out.send([0xB0|ch(),cc,v]); log(`CC${cc} = ${v}  ${label||""}`);
+}
+function sendPC(n){
+  if(n==null||n==="")return;
+  if(!out){log(`(not sent) PC ${n}`);return;}
+  out.send([0xC0|ch(),Number(n)&127]); log(`Program Change ${n}`);
+}
+function refreshOutputs(){
+  const sel=$("output"), prev=sel.value; sel.innerHTML='<option value="">— no output —</option>';
+  if(!midi)return;
+  for(const o of midi.outputs.values()) sel.add(new Option(o.name,o.id));
+  let saved=null;try{saved=localStorage.getItem("oxStompOutputName");}catch{}
+  const pick=[...midi.outputs.values()].find(o=>o.id===prev)||[...midi.outputs.values()].find(o=>saved&&o.name===saved)||[...midi.outputs.values()].find(o=>/ox|uafx|universal/i.test(o.name));
+  if(pick)sel.value=pick.id;
+  selectOutput();
+}
+function selectOutput(){
+  out=midi?midi.outputs.get($("output").value)||null:null;
+  if(out){try{localStorage.setItem("oxStompOutputName",out.name);}catch{}}
+  if(out)setStatus("Connected: "+out.name,"ok");
+  else setStatus(midi?(midi.outputs.size?"Choose an output":(window.webkit?.messageHandlers?.midi?"Plug in the OX Stomp (USB-C)":"No MIDI outputs found — check USB cable / close UA Connect")):"Not connected", midi&&!midi.outputs.size?"err":"");
+}
+async function connectMIDI(){
+  if(!navigator.requestMIDIAccess){setStatus("This browser has no Web MIDI — use Chrome or Edge","err");return;}
+  try{midi=await navigator.requestMIDIAccess();midi.onstatechange=refreshOutputs;refreshOutputs();}
+  catch(e){setStatus("MIDI access denied: "+e.message,"err");}
+}
+$("connect").onclick=connectMIDI;
+$("output").onchange=selectOutput;
+
+// ---- UI ----
+// Estimated unit conversions. UA publishes the end points (shown in UAFX Control) but not the
+// curve between them, so these are approximations, marked "≈" in the UI.
+const hz=f=>f>=1000?(f/1000).toFixed(f>=10000?0:1)+" kHz":Math.round(f)+" Hz";
+const UNITS = {
+  // 0.14 ms – 3 s, assumed logarithmic (typical for delay-time controls)
+  delayTime:v=>{const ms=0.14*Math.pow(3000/0.14,v/127);return ms>=1000?(ms/1000).toFixed(2)+" s":ms>=10?Math.round(ms)+" ms":ms.toFixed(1)+" ms";},
+  // -100% … +100%, centre = 0 (app labels)
+  bipolar:v=>{const p=Math.round((v-64)/63*100);return (p>0?"+":"")+Math.max(-100,Math.min(100,p))+"%";},
+  // Manual: reverb mix is 15% wet at the halfway point → piecewise-linear guess
+  revMix:v=>{const w=v<=64?v/64*15:15+(v-64)/63*85;return Math.round(w)+"% wet";},
+  pct:v=>Math.round(v/127*100)+"%",
+  db10:v=>{const d=Math.round((v-64)/63*100)/10;const c=Math.max(-10,Math.min(10,d));return (c>0?"+":"")+c.toFixed(1)+" dB";},
+  // 1176: attack ≈800 µs (slow, 1) → ≈20 µs (fast, 7); release ≈1.1 s (1) → ≈50 ms (7)
+  atk1176:v=>{const us=800*Math.pow(20/800,v/127);return Math.round(us)+" µs";},
+  rel1176:v=>{const ms=1100*Math.pow(50/1100,v/127);return ms>=1000?(ms/1000).toFixed(2)+" s":Math.round(ms)+" ms";},
+  offPct:v=>v===0?"off":Math.round(v/127*100)+"%",
+  // High Cut: 20 Hz … off (top of travel = off), Low Cut: off … 16 kHz — log sweep assumed
+  hiCut:v=>v>=127?"off":hz(20*Math.pow(1000,v/127)),
+  loCut:v=>v<=0?"off":hz(20*Math.pow(800,v/127)),
+};
+function fmt(p,v){
+  if(p.pan){const d=v-64;return d===0?"C":(d<0?"L"+(-d):"R"+d);}
+  if(p.unit){const t=UNITS[p.unit](v);return (p.exact||t==="off"?"":"≈")+t;}
+  return v;
+}
+const ui={};
+function tag(p){return p.nomidi?'<span class="tag rig">Rig</span>':`<span class="cc">CC${p.cc}</span>`;}
+function applyLinks(){
+  for(const p of PARAMS){
+    if(!p.linkKey||!state[p.linkKey])continue;
+    if(p.linkedTo)state[p.id]=state[p.linkedTo];
+    if(p.mirrorOf)state[p.id]=127-state[p.mirrorOf];
+    if(ui[p.id])paint(p);
+  }
+}
+function build(){
+  const main=$("main");
+  // Footswitch / bypass / program change
+  const fs=document.createElement("section");
+  fs.innerHTML=`<h2>Footswitches & Rigs</h2>
+    <div class="seg" id="byp">
+      <button data-v="0">Bypass</button><button data-v="1">Left FS on</button><button data-v="2">Right FS on</button>
+    </div><p class="note">Bypass state <span class="cc">CC19</span></p>
+    <div class="toggles"><button id="fsl">Press Left FS <span class="cc">CC12</span></button><button id="fsr">Press Right FS <span class="cc">CC13</span></button></div>
+    <div class="row" style="margin-top:12px"><label>Program</label><input id="pc" type="number" min="0" max="127" placeholder="0–127"><button id="pcSend">Send</button></div>
+    <p class="note">Program Change recalls Rigs you assigned to PC slots in UAFX Control — this is how Rig-tagged settings (Master EQ, compressor, delay mode…) reach the pedal.</p>`;
+  main.appendChild(fs);
+  fs.querySelectorAll("#byp button").forEach(b=>b.onclick=()=>{state.bypass=Number(b.dataset.v);sendCC(19,state.bypass,"Bypass");paintBypass();});
+  $("fsl").onclick=()=>sendCC(12,1,"Left FS press");
+  $("fsr").onclick=()=>sendCC(13,1,"Right FS press");
+  $("pcSend").onclick=()=>{const v=$("pc").value;state.pc=v===""?null:Number(v);sendPC(state.pc);};
+
+  for(const s of SECTIONS){
+    const sec=document.createElement("section");
+    sec.innerHTML=`<h2>${s.title}</h2>`+(s.note?`<p class="note" style="margin:-4px 0 8px">${s.note}</p>`:"");
+    const tg=document.createElement("div");tg.className="toggles";
+    for(const p of s.params){
+      if(p.type==="toggle"){
+        const b=document.createElement("button");
+        b.innerHTML=`${p.label}${tag(p)}`;
+        if(p.nomidi)b.classList.add("nomidi");
+        b.onclick=()=>{state[p.id]=state[p.id]?0:1;if(!p.nomidi)sendCC(p.cc,state[p.id],`${s.title} ${p.label}`);applyLinks();paint(p);};
+        ui[p.id]=b;tg.appendChild(b);continue;
+      }
+      const row=document.createElement("div");row.className="row";
+      if(p.nomidi)row.classList.add("nomidi");
+      const lab=document.createElement("label");lab.innerHTML=`${p.label}${tag(p)}`;
+      const val=document.createElement("span");val.className="val";
+      let ctl;
+      if(p.type==="select"){
+        ctl=document.createElement("select");
+        p.options.forEach((o,i)=>ctl.add(new Option(o,i)));
+        ctl.onchange=()=>{state[p.id]=Number(ctl.value);if(!p.nomidi)sendCC(p.cc,state[p.id],`${s.title} ${p.label}: ${p.options[state[p.id]]}`);paint(p);};
+      }else{
+        ctl=document.createElement("input");ctl.type="range";ctl.min=0;ctl.max=127;
+        let last=null;
+        ctl.oninput=()=>{
+          if(p.linkKey&&state[p.linkKey]){paint(p);return;} // follower locked while linked
+          state[p.id]=Number(ctl.value);val.textContent=fmt(p,state[p.id]);
+          if(!p.nomidi&&state[p.id]!==last){last=state[p.id];sendCC(p.cc,state[p.id],`${s.title} ${p.label}`);}
+          applyLinks();};
+        ctl.ondblclick=()=>{state[p.id]=p.def;paint(p);if(!p.nomidi)sendCC(p.cc,p.def,`${s.title} ${p.label} (reset)`);applyLinks();};
+      }
+      ui[p.id]={ctl,val};
+      row.append(lab,ctl,val);sec.appendChild(row);
+    }
+    if(tg.children.length)sec.appendChild(tg);
+    main.appendChild(sec);
+  }
+  buildRigLib(main);
+  const lg=document.createElement("section");lg.innerHTML=`<h2>MIDI log</h2><div id="log"></div>
+    <p class="note">MIDI is one-way: controls show what this page last sent, not the pedal's physical knobs. Use “Send all” to push this screen to the pedal. Double-click a slider to reset it. Values marked ≈ are estimates: UA publishes each range’s end points but not the curve between them.</p>`;
+  lg.style.gridColumn="1/-1";main.appendChild(lg);
+}
+// ---- Rig Library: a saved Rig = every value on this page + its Program Change slot ----
+const RIGKEY="oxStompRigLib";
+function readRigs(){try{return JSON.parse(localStorage.getItem(RIGKEY))||[];}catch{return [];}}
+function writeRigs(a){try{localStorage.setItem(RIGKEY,JSON.stringify(a));}catch{log("Could not save Rig Library — browser storage unavailable");}}
+function esc(t){return String(t??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function P(id){return PARAMS.find(p=>p.id===id);}
+function rigSummary(r){
+  const st=r.state; if(!st)return r.notes||"";
+  const v=id=>fmt(P(id),st[id]??P(id).def).replace("≈","");
+  const parts=[CABS[st.cab]??"",`${MICS[st.m1]} + ${MICS[st.m2]}`];
+  if(st.eqon){const bands=[["eqlow","L"],["eqlomid","LM"],["eqmid","M"],["eqhigh","H"]].filter(([k])=>st[k]!==64).map(([k,l])=>`${l} ${v(k)}`);parts.push("EQ "+(bands.join(" ")||"flat"));}
+  if(st.cmpon)parts.push("1176 "+P("cmpratio").options[st.cmpratio]);
+  if(st.dly)parts.push(`${P("dmode").options[st.dmode]} delay ${v("dlytime")}`);
+  if(st.rev)parts.push(`Plate ${v("revmix")}`);
+  if(r.notes)parts.push(r.notes);
+  return parts.filter(Boolean).join(" · ");
+}
+let editing=-1;
+function buildRigLib(main){
+  const sec=document.createElement("section");sec.style.gridColumn="1/-1";
+  sec.innerHTML=`<h2>Rig Library</h2>
+    <p class="note">Set up a sound on this page, match it in UAFX Control (Rig-tagged controls can only be applied there), save it on the pedal and give it a MIDI Program Change slot. Then save it here: <b>Recall</b> sends that Program Change and loads the page back to these values.</p>
+    <div class="eqgrid" style="margin-top:10px">
+      <label>Rig name<input type="text" id="rf_name" placeholder="Gravity Jay"></label>
+      <label>Program Change #<input type="number" id="rf_pc" min="0" max="127" placeholder="0–127"></label>
+      <label style="grid-column:span 2">Notes<input type="text" id="rf_notes" placeholder="Lead tone, use with Ruby"></label>
+    </div>
+    <div class="toggles" style="margin-top:8px"><button class="primary" id="rf_save">Save current page as Rig</button><button id="rf_clear">New</button></div>
+    <div class="rigs" id="rigList" style="margin-top:12px"></div>`;
+  main.appendChild(sec);
+  $("rf_save").onclick=()=>{
+    const r={name:$("rf_name").value.trim()||"Untitled Rig",pc:$("rf_pc").value===""?null:Math.max(0,Math.min(127,Number($("rf_pc").value))),notes:$("rf_notes").value.trim(),state:{...state}};
+    const a=readRigs(); if(editing>=0)a[editing]=r; else a.push(r); writeRigs(a); log((editing>=0?"Updated":"Saved")+" Rig "+r.name); editing=-1; clearRigForm(); renderRigs();
+  };
+  $("rf_clear").onclick=()=>{editing=-1;clearRigForm();};
+  renderRigs();
+}
+function clearRigForm(){$("rf_name").value="";$("rf_pc").value="";$("rf_notes").value="";$("rf_save").textContent="Save current page as Rig";}
+function loadState(st){Object.assign(state,Object.fromEntries(PARAMS.map(p=>[p.id,p.def])),st);applyLinks();paintAll();}
+function renderRigs(){
+  const box=$("rigList"),a=readRigs();
+  if(!a.length){box.innerHTML='<p class="note">No Rigs saved yet.</p>';return;}
+  box.innerHTML=a.map((r,i)=>`<div class="rig"><b>${esc(r.name)}${r.pc!=null?` <span class="badge">PC ${r.pc}</span>`:""}</b>
+    <div class="acts"><button data-act="recall" data-i="${i}">Recall</button><button data-act="edit" data-i="${i}">Edit</button><button data-act="del" data-i="${i}">✕</button></div>
+    <div class="meta">${esc(rigSummary(r))}</div></div>`).join("");
+  box.querySelectorAll("button").forEach(b=>b.onclick=()=>{
+    const i=Number(b.dataset.i),a=readRigs(),r=a[i];
+    if(b.dataset.act==="recall"){
+      if(r.state)loadState(r.state);
+      if(r.pc!=null){state.pc=r.pc;$("pc").value=r.pc;sendPC(r.pc);}
+      log("Recalled Rig "+r.name+(r.pc==null?" (no PC set — page only)":""));
+    }
+    if(b.dataset.act==="edit"){editing=i;if(r.state)loadState(r.state);$("rf_name").value=r.name;$("rf_pc").value=r.pc??"";$("rf_notes").value=r.notes||"";
+      $("rf_save").textContent="Update Rig";$("rf_name").scrollIntoView({behavior:"smooth",block:"center"});}
+    if(b.dataset.act==="del"&&confirm(`Delete "${r.name}"?`)){a.splice(i,1);writeRigs(a);renderRigs();}
+  });
+}
+function paint(p){
+  const u=ui[p.id],v=state[p.id];
+  if(p.type==="toggle"){u.classList.toggle("on",!!v);return;}
+  u.ctl.value=v;u.val.textContent=p.type==="select"?"":fmt(p,v);
+  if(p.linkKey){const locked=!!state[p.linkKey];u.ctl.disabled=locked;u.ctl.title=locked?"Linked — turn off the link to adjust separately":"";}
+}
+function paintBypass(){document.querySelectorAll("#byp button").forEach(b=>b.classList.toggle("on",Number(b.dataset.v)===state.bypass));}
+function paintAll(){PARAMS.forEach(paint);paintBypass();$("pc").value=state.pc??"";}
+
+// UA's recommended order: Program Change, then bypass, then everything else
+async function sendAll(){
+  if(state.pc!=null)sendPC(state.pc);
+  await new Promise(r=>setTimeout(r,120));
+  sendCC(19,state.bypass,"Bypass");
+  for(const p of PARAMS.filter(q=>!q.nomidi)){sendCC(p.cc,state[p.id],p.label);await new Promise(r=>setTimeout(r,8));}
+}
+$("sendAll").onclick=sendAll;
+
+// ---- Snapshots (local to this browser) ----
+const KEY="oxStompSnapshots";
+function readSnaps(){try{return JSON.parse(localStorage.getItem(KEY))||{};}catch{return {};}}
+function writeSnaps(o){try{localStorage.setItem(KEY,JSON.stringify(o));}catch{log("Could not save — browser storage unavailable");}}
+function refreshSnaps(){const sel=$("snapList"),s=readSnaps();sel.innerHTML='<option value="">Snapshots…</option>';Object.keys(s).sort().forEach(k=>sel.add(new Option(k,k)));}
+$("snapSave").onclick=()=>{const n=prompt("Snapshot name:",$("snapList").value||"My tone");if(!n)return;const s=readSnaps();s[n]={...state};writeSnaps(s);refreshSnaps();$("snapList").value=n;log("Saved snapshot "+n);};
+$("snapLoad").onclick=()=>{const n=$("snapList").value,s=readSnaps();if(!s[n])return;loadState(s[n]);sendAll();log("Loaded snapshot "+n);};
+$("snapDel").onclick=()=>{const n=$("snapList").value;if(!n||!confirm(`Delete "${n}"?`))return;const s=readSnaps();delete s[n];writeSnaps(s);refreshSnaps();};
+$("exportBtn").onclick=()=>{const native=window.webkit?.messageHandlers?.midi;if(native){native.postMessage({cmd:"export",name:"ox-stomp-snapshots.json",json:JSON.stringify(readSnaps(),null,2)});return;}const blob=new Blob([JSON.stringify(readSnaps(),null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ox-stomp-snapshots.json";a.click();};
+$("importBtn").onclick=()=>$("importFile").click();
+$("importFile").onchange=async e=>{try{const o=JSON.parse(await e.target.files[0].text());writeSnaps({...readSnaps(),...o});refreshSnaps();log("Imported snapshots");}catch{log("Import failed — not a valid snapshot file");}};
+
+build();applyLinks();paintAll();refreshSnaps();
+// Inside the iPhone app: connect automatically and hide the Connect button — just plug in the pedal
+if(window.webkit?.messageHandlers?.midi){$("connect").style.display="none";setStatus("Plug in the OX Stomp…");connectMIDI();}
+
+// ---- Installable PWA: offline cache when served over http(s); skipped in the iOS wrapper (file://) ----
+if("serviceWorker" in navigator && location.protocol.startsWith("http")){
+  addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(e=>console.warn("SW:",e)));
+}
+</script>
+</body>
+</html>

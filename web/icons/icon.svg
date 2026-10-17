@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#141210"/>
+  <circle cx="256" cy="256" r="168" fill="#1f1b17" stroke="#3a3229" stroke-width="10"/>
+  <circle cx="256" cy="256" r="128" fill="none" stroke="#d9a441" stroke-width="14"/>
+  <circle cx="256" cy="256" r="44" fill="#d9a441"/>
+  <text x="256" y="452" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="58" letter-spacing="8" fill="#efe6d8">OX</text>
+</svg>
