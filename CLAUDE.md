@@ -56,7 +56,7 @@ Source: https://help.uaudio.com/hc/en-us/articles/13621362465300
 4. The `≈` unit curves (delay time can be measured with an audio interface loopback).
 
 ## Possible next steps (Jay's call)
-- Push to GitHub and turn on Pages (PWA is ready; see Layout). Not yet deployed.
+- Live at https://jaysuchanun.github.io/ox-stomp-control/ (repo github.com/jaysuchanun/ox-stomp-control; push to main redeploys).
 - Ship the iOS app via TestFlight (needs the $99/yr Apple Developer Program).
 - ESP32-S3 Wi-Fi bridge: serves the page over its own Wi-Fi and forwards WebSocket → USB-host MIDI, so any
   browser (incl. iPhone Safari) works and it doubles as a footswitch box.
