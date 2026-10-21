@@ -50,7 +50,9 @@ Source: https://help.uaudio.com/hc/en-us/articles/13621362465300
   (always wrapped in try/catch).
 
 ## Not yet verified on real hardware
-1. Does the OX Stomp enumerate as a USB MIDI device to a Mac (Audio MIDI Setup → MIDI Studio) and to an iPhone?
+1. ~~Mac~~ verified 2026-10-21: enumerates as "Oxstomp" (USB VID 0x2b5a PID 0x0038) and CC19 on ch 1 toggles bypass
+   (pedal Control channel must be set; it was Disable). iPhone still unverified.
+   Chrome needs the site's "MIDI devices" permission; if its prompt is missed, requestMIDIAccess just hangs.
 2. Does CC41 move Time A only, or A and B together when linked?
 3. Cab CC values 16–21.
 4. The `≈` unit curves (delay time can be measured with an audio interface loopback).

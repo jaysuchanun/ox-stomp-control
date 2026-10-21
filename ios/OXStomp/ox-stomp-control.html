@@ -205,8 +205,12 @@ function selectOutput(){
 }
 async function connectMIDI(){
   if(!navigator.requestMIDIAccess){setStatus("This browser has no Web MIDI — use Chrome or Edge","err");return;}
+  // Chrome waits silently if its permission prompt was missed or dismissed — say so instead of doing nothing
+  setStatus("Waiting for MIDI permission…");
+  const hint=setTimeout(()=>{if(!midi)setStatus("No MIDI permission yet — allow \"MIDI devices\" in the address bar's site settings, then reload","err");},4000);
   try{midi=await navigator.requestMIDIAccess();midi.onstatechange=refreshOutputs;refreshOutputs();}
-  catch(e){setStatus("MIDI access denied: "+e.message,"err");}
+  catch(e){setStatus("MIDI access denied — allow \"MIDI devices\" in the address bar's site settings, then reload","err");log("requestMIDIAccess: "+e.message);}
+  finally{clearTimeout(hint);}
 }
 $("connect").onclick=connectMIDI;
 $("output").onchange=selectOutput;
