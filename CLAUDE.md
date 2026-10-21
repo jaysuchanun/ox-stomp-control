@@ -43,6 +43,7 @@ modeled on UA's UAFX Control app. Jay is an electrical engineer (embedded / ESP3
   `/panel/emperor_state/{current_rig_index, current_cab_selection, current_mic1/2_selection,
   current_room_mic_selection, bypassed_delay, bypassed_reverb, right_footswitch_mode}/value`.
   Cab/mic/room indexes use the same tables as the CCs. The page sends GETs only — no SETs (yet).
+  Verified in Chrome on the Mac 2026-10-21: the live panel follows the LEDs, Rig knob and knobs.
   On Jay's pedal `midi_cc_map` shows **Cab has no CC assigned (-1)**, so CC20 does nothing until set in UAFX Control.
 - Send order (UA's rule): Program Change → Bypass (CC19) → everything else.
 - MIDI CC/PC channels are **disabled by default** on the pedal; enable them in UAFX Control.
