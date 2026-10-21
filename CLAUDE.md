@@ -27,7 +27,7 @@ modeled on UA's UAFX Control app. Jay is an electrical engineer (embedded / ESP3
 - iOS browsers (Safari *and* Chrome on iOS) have no Web MIDI — the web page alone can't reach the pedal on iPhone.
 
 ## OX Stomp MIDI CC map (UA OX Stomp manual, fw 2.0)
-7 Output · 12 FS Left (1 = press) · 13 FS Right · 19 Bypass (0 bypass, 1 L FS, 2 R FS) · 20 Cab (0–21) ·
+7 Output · 12 FS Left (manual says 1 = press; pedal needs 127, page sends 127 then 0) · 13 FS Right (same) · 19 Bypass (0 bypass, 1 L FS, 2 R FS) · 20 Cab (0–21) ·
 21 Speaker Drive · 22 Mic1 model (0–6) · 23 Mic1 Vol · 24 Mic1 Pan · 25 Mic1 Mute · 26 Mic1 Axis (0 off, 1 on) ·
 27 Mic1 Low Cut · 28–33 same for Mic 2 · 34 Room Mic (0–5) · 35 Room level · 36 Room Pan · 37 Room Mute ·
 38 Room Damp · 39 Room Low Cut · 40 Delay Enable · 41 Delay Time · 42 Delay Feedback · 44 Delay Mix ·

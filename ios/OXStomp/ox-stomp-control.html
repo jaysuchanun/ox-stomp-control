@@ -264,8 +264,10 @@ function build(){
     <p class="note">Program Change recalls Rigs you assigned to PC slots in UAFX Control — this is how Rig-tagged settings (Master EQ, compressor, delay mode…) reach the pedal.</p>`;
   main.appendChild(fs);
   fs.querySelectorAll("#byp button").forEach(b=>b.onclick=()=>{state.bypass=Number(b.dataset.v);sendCC(19,state.bypass,"Bypass");paintBypass();});
-  $("fsl").onclick=()=>sendCC(12,1,"Left FS press");
-  $("fsr").onclick=()=>sendCC(13,1,"Right FS press");
+  // Verified on the pedal: a press needs 127 (UA's table says 1, which the pedal ignores), then release with 0
+  const press=(cc,label)=>{sendCC(cc,127,label+" press");setTimeout(()=>sendCC(cc,0,label+" release"),150);};
+  $("fsl").onclick=()=>press(12,"Left FS");
+  $("fsr").onclick=()=>press(13,"Right FS");
   $("pcSend").onclick=()=>{const v=$("pc").value;state.pc=v===""?null:Number(v);sendPC(state.pc);};
 
   for(const s of SECTIONS){
