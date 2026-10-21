@@ -21,6 +21,9 @@ modeled on UA's UAFX Control app. Jay is an electrical engineer (embedded / ESP3
   wrapper, which injects a `navigator.requestMIDIAccess` shim (`StompWebView.swift`) — the page code
   doesn't know the difference. Inside the wrapper the page auto-connects and hides the Connect button.
 - Messages: CC `[0xB0|ch, cc, value]`, Program Change `[0xC0|ch, n]`. One-way: the pedal never reports state.
+  Verified 2026-10-21: the pedal is a MIDI *source* ("Oxstomp") but sends nothing over USB when its footswitches
+  or knobs are used, so the page can't mirror the pedal — "Send all" pushes the page's state to it instead.
+  Jay's pedal Control (CC) channel is 1; Program Change is Omni.
 - Send order (UA's rule): Program Change → Bypass (CC19) → everything else.
 - MIDI CC/PC channels are **disabled by default** on the pedal; enable them in UAFX Control.
 - Only one USB host at a time; UAFX Control over Bluetooth can stay connected.
