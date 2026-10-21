@@ -465,12 +465,15 @@ const LIVE=[ // [key, path, label, format]
   ["m1","/panel/emperor_state/current_mic1_selection/value","Mic 1",v=>MICS[v]??v],
   ["m2","/panel/emperor_state/current_mic2_selection/value","Mic 2",v=>MICS[v]??v],
   ["room","/panel/emperor_state/current_room_mic_selection/value","Room mic",v=>ROOMS[v]??v],
-  ["delayOn","/panel/emperor_state/bypassed_delay/value","Delay",v=>v?"off":"on"],
-  ["revOn","/panel/emperor_state/bypassed_reverb/value","Reverb",v=>v?"off":"on"],
+  // bypassed_delay/_reverb don't follow the footswitches (verified), so Delay/Reverb come from the LEDs + mode
+  ["fsMode","/panel/emperor_state/right_footswitch_mode/value","Footswitches",v=>FS_MODES[v]??v],
   ["k1","/panel/control/knob_1/normalized_value/value","Top-left knob","knob"],["k2","/panel/control/knob_2/normalized_value/value","Top-middle knob","knob"],
   ["k3","/panel/control/knob_3/normalized_value/value","Top-right knob","knob"],["k4","/panel/control/knob_4/normalized_value/value","Mic 1 knob","knob"],
   ["k5","/panel/control/knob_5/normalized_value/value","Rig knob","knob"],["k6","/panel/control/knob_6/normalized_value/value","Mic 2 knob","knob"],
 ];
+const FS_MODES=["A: bypass · B: A/B","A: delay · B: reverb","A/B · C/D","A/B · delay","A/B · reverb","A/B · reverb + delay"];
+// Which footswitch LED means delay / reverb on, per footswitch mode (only modes whose LEDs map 1:1)
+const FX_BY_MODE={1:{delay:"ledA",reverb:"ledB"}};
 // state.<id> the page's own controls take from the pedal (no MIDI is sent for these)
 const LIVE_TO_PAGE={cab:"cab",m1:"m1",m2:"m2",room:"room"};
 let uanet=null, livePrev={};
@@ -478,8 +481,10 @@ function ledColor(v){const u=v>>>0,r=u>>>24,g=(u>>>16)&255,b=(u>>>8)&255;return 
 function renderLive(vals){
   for(const k of["ledA","ledB"])if(k in vals){$(k).style.background=ledColor(vals[k]);}
   const g=$("liveGrid");
-  if(!g.childElementCount)g.innerHTML=LIVE.filter(x=>x[2]).map(([k,,l,f])=>`<div><div class="k">${l}</div>`+(f==="knob"?`<div class="meter"><b id="lv_${k}"></b></div>`:`<div class="v" id="lv_${k}">–</div>`)+`</div>`).join("");
-  for(const[k,,l,f]of LIVE){if(!l||!(k in vals))continue;const el=$("lv_"+k);
+  const fx=FX_BY_MODE[vals.fsMode],lit=k=>ledColor(vals[k])!=="";
+  vals.delayOn=fx?(lit(fx.delay)?"on":"off"):"—";vals.revOn=fx?(lit(fx.reverb)?"on":"off"):"—";
+  if(!g.childElementCount)g.innerHTML=[...LIVE.slice(0,7),["delayOn",,"Delay",v=>v],["revOn",,"Reverb",v=>v],...LIVE.slice(7)].filter(x=>x[2]).map(([k,,l,f])=>`<div><div class="k">${l}</div>`+(f==="knob"?`<div class="meter"><b id="lv_${k}"></b></div>`:`<div class="v" id="lv_${k}">–</div>`)+`</div>`).join("");
+  for(const[k,,l,f]of[...LIVE,["delayOn",,"Delay",v=>v],["revOn",,"Reverb",v=>v]]){if(!l||!(k in vals))continue;const el=$("lv_"+k);
     if(f==="knob"){el.style.width=(vals[k]*100).toFixed(1)+"%";el.parentElement.title=Math.round(vals[k]*100)+"%";}else el.textContent=f(vals[k]);}
   let changed=false;
   for(const[k,id]of Object.entries(LIVE_TO_PAGE))if(k in vals&&vals[k]!==livePrev[k]&&state[id]!==vals[k]){state[id]=vals[k];changed=true;}
