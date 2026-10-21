@@ -43,7 +43,7 @@ modeled on UA's UAFX Control app. Jay is an electrical engineer (embedded / ESP3
   `/panel/emperor_state/{current_rig_index, current_cab_selection, current_mic1/2_selection,
   current_room_mic_selection, right_footswitch_mode}/value`. `bypassed_delay/_reverb` are stale (stay true with
   reverb on, don't change on FS press) — the page derives Delay/Reverb from the LEDs when right_footswitch_mode = 1
-  ("Delay-Reverb": A = delay, B = reverb; Jay's setting). Other modes show "—". Real FX state probably lives in
+  ("Delay-Reverb": A = delay, B = reverb; Jay's setting; verified on the pedal 2026-10-21). Other modes show "—". Real FX state probably lives in
   another service (ports 4720/4793/5600 unexplored).
   Cab/mic/room indexes use the same tables as the CCs. The page sends GETs only — no SETs (yet).
   Verified in Chrome on the Mac 2026-10-21: the live panel follows the LEDs, Rig knob and knobs.
