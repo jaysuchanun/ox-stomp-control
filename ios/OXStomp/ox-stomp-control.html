@@ -54,6 +54,14 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .badge{display:inline-block;font-size:11px;padding:2px 6px;border-radius:6px;background:#3a2a1c;color:var(--accent);margin-left:6px}
 .tag{font-size:10px;margin-left:5px;padding:1px 5px;border-radius:5px;vertical-align:1px}
 .tag.rig{background:#2b3440;color:#9db8d6}
+#live{grid-column:1/-1}
+.livegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px 16px;margin-top:6px}
+.livegrid .k{font-size:12px;color:var(--muted)} .livegrid .v{font-size:16px;font-weight:600}
+.leds{display:flex;gap:18px;align-items:center}
+.led{display:inline-flex;align-items:center;gap:8px;font-weight:600}
+.led i{width:16px;height:16px;border-radius:50%;background:#3a3a3a;box-shadow:inset 0 0 0 1px #0006;display:inline-block}
+.meter{height:6px;background:var(--panel2);border-radius:3px;overflow:hidden;margin-top:4px}
+.meter b{display:block;height:100%;background:var(--accent);width:0}
 .row.nomidi input[type=range]{accent-color:#7f9cc0}
 button.nomidi.on{background:#7f9cc0;border-color:#7f9cc0;color:#0f1620}
 input[type=range]:disabled{opacity:.45}
@@ -67,6 +75,7 @@ input[type=range]:disabled{opacity:.45}
     <button id="connect" class="primary">Connect MIDI</button>
     <select id="output" title="MIDI output"><option value="">— no output —</option></select>
     <label class="status">Ch <select id="channel"></select></label>
+    <button id="serialBtn" title="Read the pedal's live state over its USB serial port (Chrome/Edge)">Read pedal</button>
     <button id="sendAll" title="Send every value on screen to the pedal">Send all</button>
     <select id="snapList" title="Saved snapshots"><option value="">Snapshots…</option></select>
     <button id="snapLoad">Load</button>
@@ -253,12 +262,20 @@ function applyLinks(){
 }
 function build(){
   const main=$("main");
+  // Live pedal state, read over USB serial (see "Live state" below)
+  const lv=document.createElement("section");lv.id="live";lv.hidden=true;
+  lv.innerHTML=`<h2>Pedal — live <span id="liveStatus" class="status"></span></h2>
+    <div class="leds"><span class="led"><i id="ledA"></i>A</span><span class="led"><i id="ledB"></i>B</span></div>
+    <div class="livegrid" id="liveGrid"></div>
+    <p class="note">Read from the pedal several times a second, so knobs and footswitches you use on the pedal show up here.
+      Cab, mics and room mic also update the controls below.</p>`;
+  main.appendChild(lv);
   // Footswitch / bypass / program change
   const fs=document.createElement("section");
   fs.innerHTML=`<h2>Footswitches & Rigs</h2>
     <div class="seg"><button id="fsl">Press A <span class="cc">CC12</span></button><button id="fsr">Press B <span class="cc">CC13</span></button></div>
-    <p class="note">Same as stepping on footswitch A or B: each press toggles it. The pedal doesn't report its LEDs,
-      so check them on the pedal (at power-up: A off, B on).</p>
+    <p class="note">Same as stepping on footswitch A or B: each press toggles it. Click <b>Read pedal</b> to see the
+      A/B LEDs live (at power-up: A off, B on).</p>
     <div class="seg" id="byp" style="margin-top:10px">
       <button data-v="0">Bypass</button><button data-v="1">A on</button><button data-v="2">B on</button>
     </div><p class="note">Footswitch state <span class="cc">CC19</span> — unreliable on the pedal (2 = B on works;
@@ -312,7 +329,7 @@ function build(){
   }
   buildRigLib(main);
   const lg=document.createElement("section");lg.innerHTML=`<h2>MIDI log</h2><div id="log"></div>
-    <p class="note">MIDI is one-way: controls show what this page last sent, not the pedal's physical knobs. Use “Send all” to push this screen to the pedal. Double-click a slider to reset it. Values marked ≈ are estimates: UA publishes each range’s end points but not the curve between them.</p>`;
+    <p class="note">MIDI is one-way, so most controls show what this page last sent. “Read pedal” (Chrome/Edge) reads the pedal's live state — LEDs, Rig, cab, mics, knobs — over USB. Use “Send all” to push this screen to the pedal. Double-click a slider to reset it. Values marked ≈ are estimates: UA publishes each range’s end points but not the curve between them.</p>`;
   lg.style.gridColumn="1/-1";main.appendChild(lg);
 }
 // ---- Rig Library: a saved Rig = every value on this page + its Program Change slot ----
@@ -401,6 +418,91 @@ $("snapDel").onclick=()=>{const n=$("snapList").value;if(!n||!confirm(`Delete "$
 $("exportBtn").onclick=()=>{const native=window.webkit?.messageHandlers?.midi;if(native){native.postMessage({cmd:"export",name:"ox-stomp-snapshots.json",json:JSON.stringify(readSnaps(),null,2)});return;}const blob=new Blob([JSON.stringify(readSnaps(),null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ox-stomp-snapshots.json";a.click();};
 $("importBtn").onclick=()=>$("importFile").click();
 $("importFile").onchange=async e=>{try{const o=JSON.parse(await e.target.files[0].text());writeSnaps({...readSnaps(),...o});refreshSnaps();log("Imported snapshots");}catch{log("Import failed — not a valid snapshot file");}};
+
+// ---- Live state over USB serial (Web Serial) ----
+// The pedal's USB port also carries a CDC serial link that UA's own software uses: "UANet" — protobuf
+// packets with JSON values, COBS-framed with a CRC7 byte per 253-byte block. MIDI is send-only, but here
+// values can be read. This page only sends GET requests (read-only). Port 4715 is the pedal's panel service.
+const UANET_PORT=4715, CRC7=[0,9,18,27,36,45,54,63,72,65,90,83,108,101,126,119,25,16,11,2,61,52,47,38,81,88,67,74,117,124,103,110,50,59,32,41,22,31,4,13,122,115,104,97,94,87,76,69,43,34,57,48,15,6,29,20,99,106,113,120,71,78,85,92,100,109,118,127,64,73,82,91,44,37,62,55,8,1,26,19,125,116,111,102,89,80,75,66,53,60,39,46,17,24,3,10,86,95,68,77,114,123,96,105,30,23,12,5,58,51,40,33,79,70,93,84,107,98,121,112,7,14,21,28,35,42,49,56,65,72,83,90,101,108,119,126,9,0,27,18,45,36,63,54,88,81,74,67,124,117,110,103,16,25,2,11,52,61,38,47,115,122,97,104,87,94,69,76,59,50,41,32,31,22,13,4,106,99,120,113,78,71,92,85,34,43,48,57,6,15,20,29,37,44,55,62,1,8,19,26,109,100,127,118,73,64,91,82,60,53,46,39,24,17,10,3,116,125,102,111,80,89,66,75,23,30,5,12,51,58,33,40,95,86,77,68,123,114,105,96,14,7,28,21,42,35,56,49,70,79,84,93,98,107,112,121];
+function crc7(b){let r=0;for(const o of b)r=CRC7[((r<<1)^o)&0xff];return r;}
+function cobsBlock(e){const r=[];let o=0;e.forEach((n,t)=>{let c=null;if(n===0)c=e.slice(o,t);else if(t===e.length-1)c=e.slice(o);if(c){r.push(1+c.length,...c);o=t+1;}});return r;}
+function cobsEncode(e){const r=[0];for(let o=0;o===0||o<e.length;o+=253){const n=e.slice(o,o+253);r.push(...cobsBlock([...n,crc7(n)+1]));}r.push(0);return Uint8Array.from(r);}
+function cobsDecode(e){const out=[],R=e.length-1;for(let n=1;n<R;n+=255){const t=Array.from(e.slice(n,Math.min(n+255,R)));const c=t.pop(),i=t.shift();let k=i-1;while(k<t.length){const l=t[k];t[k]=0;k+=l;}if(crc7(t)!==c-1)throw new Error("CRC");out.push(...t);}return Uint8Array.from(out);}
+const enc=new TextEncoder(),dec=new TextDecoder();
+function vint(n){const b=[];for(;;){const x=n&0x7f;n=Math.floor(n/128);if(n)b.push(x|0x80);else{b.push(x);return b;}}}
+const pbV=(no,v)=>[...vint(no<<3),...vint(v)], pbB=(no,b)=>[...vint(no<<3|2),...vint(b.length),...b], pbS=s=>pbB(1,[...enc.encode(s)]);
+function pbParse(b){const o={};let i=0;const rv=()=>{let v=0,m=1,x;do{x=b[i++];v+=(x&0x7f)*m;m*=128;}while(x&0x80);return v;};
+  while(i<b.length){const k=rv(),no=Math.floor(k/8),wt=k&7;let v;if(wt===0)v=rv();else if(wt===2){const L=rv();v=b.subarray(i,i+L);i+=L;}else throw new Error("wiretype "+wt);(o[no]??=[]).push(v);}return o;}
+async function pbStr(b){const m=pbParse(b);if(m[1])return dec.decode(m[1][0]);if(m[2]){const d=pbParse(m[2][0]);const ds=new Blob([d[2][0]]).stream().pipeThrough(new DecompressionStream("deflate"));return await new Response(ds).text();}return "";}
+class UANet{
+  constructor(port){this.port=port;this.uid="router:"+crypto.randomUUID();this.n=0;this.buf=[];this.wait=new Map();this.ids={};this.onHandshake=null;}
+  async open(){await this.port.open({baudRate:115200});this.writer=this.port.writable.getWriter();this.readLoop();
+    await new Promise((res,rej)=>{this.onHandshake=res;this.write(cobsEncode([]));setTimeout(()=>rej(new Error("no handshake")),3000);});
+    await this.req({action:3,path:"/",data:{deflate:false},gw:4});}
+  write(b){return this.writer.write(b);}
+  async readLoop(){const r=this.port.readable.getReader();this.reader=r;
+    try{for(;;){const{value,done}=await r.read();if(done)break;for(const x of value){this.buf.push(x);if(x===0&&this.buf.length>1){const fr=Uint8Array.from(this.buf);this.buf=[0];this.frame(fr);}}}}
+    catch(e){}finally{r.releaseLock();}}
+  async frame(fr){if(fr.length===4&&fr[1]===2&&fr[2]===1){this.onHandshake?.();this.onHandshake=null;return;}
+    if(fr.length<4)return;let m;try{m=pbParse(cobsDecode(fr));}catch{return;}
+    if(!m[3])return;const sp=pbParse(m[3][0]);let mid=null;if(sp[2]){const pm=pbParse(sp[2][0]);if(pm[11])mid=await pbStr(pm[11][0]);}
+    const w=this.wait.get(mid);if(!w)return;this.wait.delete(mid);
+    let data=null;if(sp[3]){const t=await pbStr(sp[3][0]);try{data=JSON.parse(t);}catch{data=t;}}
+    w(sp[5]?{error:await pbStr(sp[5][0])}:{data});}
+  req({action=0,path="/",pathId=0,data,gw=0}){const mid=`${this.uid}:${++this.n}`;
+    const pth=pathId?pbV(2,pathId):pbB(1,pbB(2,pbS(path)));
+    const cp=[...pbB(1,pth),...pbB(2,pbB(11,pbS(mid))),...(action?pbV(3,action):[]),...(data!==undefined?pbB(4,pbS(JSON.stringify(data))):[]),...(gw?pbV(5,gw):[])];
+    const p=new Promise((res,rej)=>{this.wait.set(mid,res);setTimeout(()=>{if(this.wait.delete(mid))rej(new Error("timeout "+path));},1500);});
+    this.write(cobsEncode([...pbB(1,[...enc.encode(this.uid)]),...pbB(2,cp)]));return p;}
+  async get(path){if(!this.ids[path]){const r=await this.req({action:3,path:"/",data:{path,port:UANET_PORT},gw:1});this.ids[path]=r.data.pathId;}
+    return (await this.req({action:1,pathId:this.ids[path]})).data;}
+  async close(){try{await this.reader?.cancel();this.writer?.releaseLock();await this.port.close();}catch{}}
+}
+const LIVE=[ // [key, path, label, format]
+  ["ledA","/panel/control/fs_led_left/state/value"],["ledB","/panel/control/fs_led_right/state/value"],
+  ["rig","/panel/emperor_state/current_rig_index/value","Rig",v=>v+1],
+  ["cab","/panel/emperor_state/current_cab_selection/value","Cabinet",v=>CABS[v]?.replace(/ \(\d+\?\)/,"")??v],
+  ["m1","/panel/emperor_state/current_mic1_selection/value","Mic 1",v=>MICS[v]??v],
+  ["m2","/panel/emperor_state/current_mic2_selection/value","Mic 2",v=>MICS[v]??v],
+  ["room","/panel/emperor_state/current_room_mic_selection/value","Room mic",v=>ROOMS[v]??v],
+  ["delayOn","/panel/emperor_state/bypassed_delay/value","Delay",v=>v?"off":"on"],
+  ["revOn","/panel/emperor_state/bypassed_reverb/value","Reverb",v=>v?"off":"on"],
+  ["k1","/panel/control/knob_1/normalized_value/value","Top-left knob","knob"],["k2","/panel/control/knob_2/normalized_value/value","Top-middle knob","knob"],
+  ["k3","/panel/control/knob_3/normalized_value/value","Top-right knob","knob"],["k4","/panel/control/knob_4/normalized_value/value","Mic 1 knob","knob"],
+  ["k5","/panel/control/knob_5/normalized_value/value","Rig knob","knob"],["k6","/panel/control/knob_6/normalized_value/value","Mic 2 knob","knob"],
+];
+// state.<id> the page's own controls take from the pedal (no MIDI is sent for these)
+const LIVE_TO_PAGE={cab:"cab",m1:"m1",m2:"m2",room:"room"};
+let uanet=null, livePrev={};
+function ledColor(v){const u=v>>>0,r=u>>>24,g=(u>>>16)&255,b=(u>>>8)&255;return r|g|b?`rgb(${r},${g},${b})`:"";}
+function renderLive(vals){
+  for(const k of["ledA","ledB"])if(k in vals){$(k).style.background=ledColor(vals[k]);}
+  const g=$("liveGrid");
+  if(!g.childElementCount)g.innerHTML=LIVE.filter(x=>x[2]).map(([k,,l,f])=>`<div><div class="k">${l}</div>`+(f==="knob"?`<div class="meter"><b id="lv_${k}"></b></div>`:`<div class="v" id="lv_${k}">–</div>`)+`</div>`).join("");
+  for(const[k,,l,f]of LIVE){if(!l||!(k in vals))continue;const el=$("lv_"+k);
+    if(f==="knob"){el.style.width=(vals[k]*100).toFixed(1)+"%";el.parentElement.title=Math.round(vals[k]*100)+"%";}else el.textContent=f(vals[k]);}
+  let changed=false;
+  for(const[k,id]of Object.entries(LIVE_TO_PAGE))if(k in vals&&vals[k]!==livePrev[k]&&state[id]!==vals[k]){state[id]=vals[k];changed=true;}
+  if(changed)PARAMS.filter(p=>Object.values(LIVE_TO_PAGE).includes(p.id)).forEach(paint);
+  livePrev=vals;
+}
+async function pollLive(){
+  while(uanet){const vals={};
+    try{for(const[k,path]of LIVE)vals[k]=await uanet.get(path);renderLive(vals);$("liveStatus").textContent="";}
+    catch(e){if(!uanet)break;$("liveStatus").textContent="· "+e.message;}
+    await new Promise(r=>setTimeout(r,150));}
+}
+async function connectSerial(){
+  if(uanet){const u=uanet;uanet=null;await u.close();$("serialBtn").textContent="Read pedal";$("live").hidden=true;return;}
+  if(!("serial" in navigator)){setStatus("This browser can't read the pedal — use Chrome or Edge on a computer","err");return;}
+  try{
+    const port=await navigator.serial.requestPort({filters:[{usbVendorId:0x2b5a}]});
+    const u=new UANet(port);await u.open();uanet=u;
+    $("live").hidden=false;$("serialBtn").textContent="Stop reading";log("Reading pedal state over USB serial");pollLive();
+  }catch(e){if(e.name!=="NotFoundError")setStatus("Couldn't read the pedal: "+e.message,"err");}
+}
+$("serialBtn").onclick=connectSerial;
+if(!("serial" in navigator))$("serialBtn").style.display="none";
 
 build();applyLinks();paintAll();refreshSnaps();
 // Inside the iPhone app: connect automatically and hide the Connect button — just plug in the pedal

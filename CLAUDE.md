@@ -21,13 +21,29 @@ modeled on UA's UAFX Control app. Jay is an electrical engineer (embedded / ESP3
   wrapper, which injects a `navigator.requestMIDIAccess` shim (`StompWebView.swift`) — the page code
   doesn't know the difference. Inside the wrapper the page auto-connects and hides the Connect button.
 - Messages: CC `[0xB0|ch, cc, value]`, Program Change `[0xC0|ch, n]`. One-way: the pedal never reports state.
-  Verified 2026-10-21: the pedal is a MIDI *source* ("Oxstomp") but sends nothing over USB when its footswitches
-  or knobs are used, so the page can't mirror the pedal — "Send all" pushes the page's state to it instead.
+  Verified 2026-10-21: the pedal is a MIDI *source* ("Oxstomp") but sends no MIDI when its footswitches
+  or knobs are used — live state comes from the serial port instead (below).
   Jay's pedal Control (CC) channel is 1; Program Change is Omni.
   Footswitches are labelled **A** (left) and **B** (right); at power-up A is off, B is on (reverb).
   CC12/CC13 = 127 (then 0) toggles A/B exactly like stepping on them — the page's main footswitch buttons.
   CC19 does NOT behave as documented: 2 → B on works, but 0 from B-on changes nothing and 1 only blinks A
   orange. So `sendAll` no longer sends CC19, and `state.bypass` starts as null (unknown).
+- **Live state over USB serial ("Read pedal", Web Serial, added 2026-10-21).** The pedal's USB also exposes a CDC
+  serial port (`/dev/cu.usbmodem…`, VID 0x2b5a) that UA Connect uses. Protocol ("UANet", from UA Connect's
+  `@uaudio/*` JS modules): frames are `0x00 + COBS(block + crc7+1)` per 253-byte block + `0x00` (UA's CRC7 table is
+  embedded in the page); handshake = send empty frame `00 02 01 00`, pedal echoes it; payload = protobuf
+  `TransportFrame{1 clientId, 2 ClientPacket | 3 ServerPacket}`; ClientPacket `{1 path{1 daemonPath{1 port,2 path}|2 pathId},
+  2 params{11 message_id,…}, 3 action(1 GET,2 SET,4 SUBSCRIBE), 4 data JSON, 5 gatewayCommand}`. Before use:
+  gateway CHECK_CAPABILITIES (4) with `{"deflate":false}`, then REGISTER_PATH (1) `{path,port}` → `pathId`.
+  Service ports: 4715 paneld (panel state), 4792 system (`/version/version/value` = 2.0.2). Replies > ~19 KB get
+  truncated unless deflate is on — the page only reads small `/…/value` paths, so it keeps deflate off.
+  SUBSCRIBE gives no pushes, so the page polls ~5×/s (each GET ≈ 2 ms). Useful paths (port 4715):
+  `/panel/control/fs_led_left|right/state/value` (RGBA int: 255 = off, 0xFF0000FF = red),
+  `/panel/control/knob_1..6/normalized_value/value` (4 = Mic 1, 5 = Rig, 6 = Mic 2; 1–3 top row),
+  `/panel/emperor_state/{current_rig_index, current_cab_selection, current_mic1/2_selection,
+  current_room_mic_selection, bypassed_delay, bypassed_reverb, right_footswitch_mode}/value`.
+  Cab/mic/room indexes use the same tables as the CCs. The page sends GETs only — no SETs (yet).
+  On Jay's pedal `midi_cc_map` shows **Cab has no CC assigned (-1)**, so CC20 does nothing until set in UAFX Control.
 - Send order (UA's rule): Program Change → Bypass (CC19) → everything else.
 - MIDI CC/PC channels are **disabled by default** on the pedal; enable them in UAFX Control.
 - Only one USB host at a time; UAFX Control over Bluetooth can stay connected.
