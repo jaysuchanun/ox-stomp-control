@@ -165,7 +165,7 @@ const SECTIONS = [
   ]},
 ];
 const PARAMS = SECTIONS.flatMap(s=>s.params);
-const state = {pc:null, bypass:1};
+const state = {pc:null, bypass:null}; // bypass: last CC19 sent; the pedal never reports its real state
 PARAMS.forEach(p=>state[p.id]=p.def);
 
 // ---- MIDI ----
@@ -256,18 +256,21 @@ function build(){
   // Footswitch / bypass / program change
   const fs=document.createElement("section");
   fs.innerHTML=`<h2>Footswitches & Rigs</h2>
-    <div class="seg" id="byp">
-      <button data-v="0">Bypass</button><button data-v="1">Left FS on</button><button data-v="2">Right FS on</button>
-    </div><p class="note">Bypass state <span class="cc">CC19</span></p>
-    <div class="toggles"><button id="fsl">Press Left FS <span class="cc">CC12</span></button><button id="fsr">Press Right FS <span class="cc">CC13</span></button></div>
+    <div class="seg"><button id="fsl">Press A <span class="cc">CC12</span></button><button id="fsr">Press B <span class="cc">CC13</span></button></div>
+    <p class="note">Same as stepping on footswitch A or B: each press toggles it. The pedal doesn't report its LEDs,
+      so check them on the pedal (at power-up: A off, B on).</p>
+    <div class="seg" id="byp" style="margin-top:10px">
+      <button data-v="0">Bypass</button><button data-v="1">A on</button><button data-v="2">B on</button>
+    </div><p class="note">Footswitch state <span class="cc">CC19</span> — unreliable on the pedal (2 = B on works;
+      0 and 1 don't act as documented). Not sent by Send all.</p>
     <div class="row" style="margin-top:12px"><label>Program</label><input id="pc" type="number" min="0" max="127" placeholder="0–127"><button id="pcSend">Send</button></div>
     <p class="note">Program Change recalls Rigs you assigned to PC slots in UAFX Control — this is how Rig-tagged settings (Master EQ, compressor, delay mode…) reach the pedal.</p>`;
   main.appendChild(fs);
   fs.querySelectorAll("#byp button").forEach(b=>b.onclick=()=>{state.bypass=Number(b.dataset.v);sendCC(19,state.bypass,"Bypass");paintBypass();});
   // Verified on the pedal: a press needs 127 (UA's table says 1, which the pedal ignores), then release with 0
   const press=(cc,label)=>{sendCC(cc,127,label+" press");setTimeout(()=>sendCC(cc,0,label+" release"),150);};
-  $("fsl").onclick=()=>press(12,"Left FS");
-  $("fsr").onclick=()=>press(13,"Right FS");
+  $("fsl").onclick=()=>press(12,"FS A");
+  $("fsr").onclick=()=>press(13,"FS B");
   $("pcSend").onclick=()=>{const v=$("pc").value;state.pc=v===""?null:Number(v);sendPC(state.pc);};
 
   for(const s of SECTIONS){
@@ -378,11 +381,11 @@ function paint(p){
 function paintBypass(){document.querySelectorAll("#byp button").forEach(b=>b.classList.toggle("on",Number(b.dataset.v)===state.bypass));}
 function paintAll(){PARAMS.forEach(paint);paintBypass();$("pc").value=state.pc??"";}
 
-// UA's recommended order: Program Change, then bypass, then everything else
+// UA's order is Program Change → bypass → everything else, but CC19 is left out: on the pedal it can
+// flip footswitch A/B unexpectedly (verified 2026-10-21), so footswitches are left as they are
 async function sendAll(){
   if(state.pc!=null)sendPC(state.pc);
   await new Promise(r=>setTimeout(r,120));
-  sendCC(19,state.bypass,"Bypass");
   for(const p of PARAMS.filter(q=>!q.nomidi)){sendCC(p.cc,state[p.id],p.label);await new Promise(r=>setTimeout(r,8));}
 }
 $("sendAll").onclick=sendAll;

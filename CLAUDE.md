@@ -24,6 +24,10 @@ modeled on UA's UAFX Control app. Jay is an electrical engineer (embedded / ESP3
   Verified 2026-10-21: the pedal is a MIDI *source* ("Oxstomp") but sends nothing over USB when its footswitches
   or knobs are used, so the page can't mirror the pedal — "Send all" pushes the page's state to it instead.
   Jay's pedal Control (CC) channel is 1; Program Change is Omni.
+  Footswitches are labelled **A** (left) and **B** (right); at power-up A is off, B is on (reverb).
+  CC12/CC13 = 127 (then 0) toggles A/B exactly like stepping on them — the page's main footswitch buttons.
+  CC19 does NOT behave as documented: 2 → B on works, but 0 from B-on changes nothing and 1 only blinks A
+  orange. So `sendAll` no longer sends CC19, and `state.bypass` starts as null (unknown).
 - Send order (UA's rule): Program Change → Bypass (CC19) → everything else.
 - MIDI CC/PC channels are **disabled by default** on the pedal; enable them in UAFX Control.
 - Only one USB host at a time; UAFX Control over Bluetooth can stay connected.
