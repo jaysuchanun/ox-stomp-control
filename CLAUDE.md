@@ -55,12 +55,8 @@ modeled on UA's UAFX Control app. Jay is an electrical engineer (embedded / ESP3
   the page reads 12 per poll cycle. OX "Output" is assumed to be MASTER gain (unverified). Delay/reverb `power`
   here is the real FX state (reverb On with B lit).
   Cab/mic/room indexes use the same tables as the CCs.
-- **Two-way link: "USB link" / "Bluetooth" (added 2026-10-21, from reverse engineering UAFX Control 2.3.0 for Android).**
+- **Two-way link: "USB link" (2026-10-21, from reverse engineering UAFX Control 2.3.0 for Android).**
   The APK is a Capacitor app whose `bundle.js.map` carries UA's full TypeScript source; details in `docs/uafx-protocol.md`.
-  Bluetooth is the same UANet protobuf as USB, minus COBS/CRC: GATT service `3bf93be5-20d2-47de-96d8-5d6fbb659220`,
-  write `ef4ede65-…-ca5356090201`, notify `…090101`, MTU char `…0a0001` (u16 LE max, u16 LE usable block size);
-  each write/notification is one block = 3-byte header (24-bit LE block number from 1, top bit = more) + payload.
-  The first request (CHECK_CAPABILITIES) is re-sent every 200 ms (UA does 10×) since early BLE writes can be lost.
   **Writes** (what UAFX Control does): SET (action 2) on service *deviced*, port **4718**, path
   `/devices/81f8e32ffea347caba3c862ee77d2a7e/buses/<bus>/…/<control>/normalized_value/value/` (trailing `/`),
   data = JSON number 0–1. Buses: master `a9aed57a…`, mic1 `e352a52e…`, mic2 `a5163369…`, room L `56d54cfa…` + R `092624c0…`
@@ -69,15 +65,11 @@ modeled on UA's UAFX Control app. Jay is an electrical engineer (embedded / ESP3
   `/panel/emperor_state/current_*_selection/value` to the index — works for Cab even with no CC assigned.
   `WRITE_MAP` / `liveWrites()` in index.html hold the mapping. When linked, `sendParam` writes live instead of sending MIDI.
   Verified on Jay's pedal over USB 2026-10-21 (Master EQ High set, read back, restored; Cab set accepted).
-  **Bluetooth not yet working on the pedal** (2026-10-21: Jay tried, USB fine). A new device only gets in after the pedal's
-  **PAIR button** is pressed (UA's own scan/error text); recovery = forget pedal in OS Bluetooth, power-cycle, PAIR.
-  BleLink now mirrors the app's connect steps (MTU max 0 = not ready, priming read of the notify char, 4 retries).
-  Then: chooser opened but the pedal wasn't listed even after PAIR → added "Show all Bluetooth devices" (acceptAllDevices,
-  shown after a miss); the picked device's name/id is logged so the real advertised name can go into the filter.
-  Then (via Show all): picked "UAFX OX Stomp", service 3bf93be5… found but **no …0201 characteristic** on Jay's pedal
-  from Chrome/macOS. BleLink now lists the service's characteristics (shown in errors) and falls back to the combined
-  …09c5fd (commented out in UA's source) or any write/notify characteristic.
-  Can't test headless here: macOS kills any process from Claude Code that touches Bluetooth (SIGABRT, no TCC permission).
+- **Bluetooth dropped (Jay's call, 2026-10-21) — USB-C only.** Tried Web Bluetooth from Chrome on the Mac: after PAIR and
+  "show all devices" the pedal ("UAFX OX Stomp") connects and shows UA's service `3bf93be5…`, but only characteristics
+  `…090301[read/write/writeNoResp]`, `…090401[read/write]`, `…0a0001[read]` — not the Android app's `…090201` (write) /
+  `…090101` (notify), and nothing that notifies, so replies can't come back. Possibly hidden until an OS-level bond.
+  The removed BleLink code is in git history (commit c6bb6ad). Don't suggest Bluetooth again unless Jay raises it.
   Verified in Chrome on the Mac 2026-10-21: the live panel follows the LEDs, Rig knob and knobs.
   On Jay's pedal `midi_cc_map` shows **Cab has no CC assigned (-1)**, so CC20 does nothing until set in UAFX Control.
 - Send order (UA's rule): Program Change → Bypass (CC19) → everything else.
@@ -115,7 +107,6 @@ Source: https://help.uaudio.com/hc/en-us/articles/13621362465300
    Live page in Chrome on the Mac verified the same day: connects and controls the pedal.
 2. Does CC41 move Time A only, or A and B together when linked?
 3. ~~Cab CC values 16–21~~ confirmed from the app 2026-10-21.
-5. Bluetooth link with the real pedal (also: which link wins if UAFX Control on a phone is connected too).
 4. The `≈` unit curves (delay time can be measured with an audio interface loopback).
 
 ## Possible next steps (Jay's call)
@@ -123,6 +114,6 @@ Source: https://help.uaudio.com/hc/en-us/articles/13621362465300
 - Ship the iOS app via TestFlight (needs the $99/yr Apple Developer Program).
 - ESP32-S3 Wi-Fi bridge: serves the page over its own Wi-Fi and forwards WebSocket → USB-host MIDI, so any
   browser (incl. iPhone Safari) works and it doubles as a footswitch box.
-- ~~Live control of the Rig-only parameters~~ done 2026-10-21 (USB link / Bluetooth) — was: would need reverse engineering UAFX Control's Bluetooth protocol
+- ~~Live control of the Rig-only parameters~~ done 2026-10-21 (USB link) — was: would need reverse engineering UAFX Control's Bluetooth protocol
   (Android HCI snoop log + APK analysis with REA, which is installed on Jay's Mac). Interoperability with his
   own pedal only — no unlocking paid features or copying UA's DSP.

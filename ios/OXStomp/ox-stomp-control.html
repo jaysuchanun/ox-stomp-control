@@ -76,8 +76,6 @@ input[type=range]:disabled{opacity:.45}
     <select id="output" title="MIDI output"><option value="">— no output —</option></select>
     <label class="status">Ch <select id="channel"></select></label>
     <button id="serialBtn" title="Two-way link over the pedal's USB port: reads its live state and sets every control, Rig settings included (Chrome/Edge)">USB link</button>
-    <button id="bleBtn" title="Same two-way link, wireless, over the pedal's Bluetooth — no cable (Chrome/Edge)">Bluetooth</button>
-    <button id="bleAllBtn" hidden title="Bluetooth chooser without the UAFX filter — for when the pedal isn't listed">Show all Bluetooth devices</button>
     <button id="sendAll" title="Send every value on screen to the pedal">Send all</button>
     <select id="snapList" title="Saved snapshots"><option value="">Snapshots…</option></select>
     <button id="snapLoad">Load</button>
@@ -149,7 +147,7 @@ const SECTIONS = [
     {id:"cmprel",label:"Release",type:"range",def:64,unit:"rel1176",nomidi:true},
     {id:"cmpratio",label:"Ratio",type:"select",options:["4:1","8:1","12:1","20:1","All"],def:0,nomidi:true},
   ]},
-  {title:"Delay", note:"Full delay layout from UAFX Control. Controls tagged CC change the pedal over MIDI; controls tagged Rig have no MIDI CC — they change the pedal live once it's linked (USB link or Bluetooth). Over MIDI only, they're kept with your snapshots as a record.", params:[
+  {title:"Delay", note:"Full delay layout from UAFX Control. Controls tagged CC change the pedal over MIDI; controls tagged Rig have no MIDI CC — they change the pedal live once it's linked (USB link). Over MIDI only, they're kept with your snapshots as a record.", params:[
     {id:"dly",cc:40,label:"Enable",type:"toggle",def:1},
     {id:"dmode",label:"Mode",type:"select",options:["Dual","Crossover","Ping Pong","Chorus","Flanger"],def:0,nomidi:true},
     {id:"dlytime",cc:41,label:"Time A",type:"range",def:22,unit:"delayTime"},
@@ -264,7 +262,7 @@ function applyLinks(){
 }
 function build(){
   const main=$("main");
-  // Live pedal state, read over the USB or Bluetooth link (see "Two-way link" below)
+  // Live pedal state, read over the USB link (see "Two-way link" below)
   const lv=document.createElement("section");lv.id="live";lv.hidden=true;
   lv.innerHTML=`<h2>Pedal — live <span id="liveStatus" class="status"></span></h2>
     <div class="leds"><span class="led"><i id="ledA"></i>A</span><span class="led"><i id="ledB"></i>B</span></div>
@@ -277,14 +275,14 @@ function build(){
   const fs=document.createElement("section");
   fs.innerHTML=`<h2>Footswitches & Rigs</h2>
     <div class="seg"><button id="fsl">Press A <span class="cc">CC12</span></button><button id="fsr">Press B <span class="cc">CC13</span></button></div>
-    <p class="note">Same as stepping on footswitch A or B: each press toggles it. Link the pedal (<b>USB link</b> or <b>Bluetooth</b>) to see the
+    <p class="note">Same as stepping on footswitch A or B: each press toggles it. Click <b>USB link</b> to see the
       A/B LEDs live (at power-up: A off, B on).</p>
     <div class="seg" id="byp" style="margin-top:10px">
       <button data-v="0">Bypass</button><button data-v="1">A on</button><button data-v="2">B on</button>
     </div><p class="note">Footswitch state <span class="cc">CC19</span> — unreliable on the pedal (2 = B on works;
       0 and 1 don't act as documented). Not sent by Send all.</p>
     <div class="row" style="margin-top:12px"><label>Program</label><input id="pc" type="number" min="0" max="127" placeholder="0–127"><button id="pcSend">Send</button></div>
-    <p class="note">Program Change recalls Rigs you assigned to PC slots in UAFX Control — over MIDI only, this is how Rig-tagged settings (Master EQ, compressor, delay mode…) reach the pedal. Linked over USB or Bluetooth, they're set live.</p>`;
+    <p class="note">Program Change recalls Rigs you assigned to PC slots in UAFX Control — over MIDI only, this is how Rig-tagged settings (Master EQ, compressor, delay mode…) reach the pedal. Linked over USB, they're set live.</p>`;
   main.appendChild(fs);
   fs.querySelectorAll("#byp button").forEach(b=>b.onclick=()=>{state.bypass=Number(b.dataset.v);sendCC(19,state.bypass,"Bypass");paintBypass();});
   // Verified on the pedal: a press needs 127 (UA's table says 1, which the pedal ignores), then release with 0
@@ -332,7 +330,7 @@ function build(){
   }
   buildRigLib(main);
   const lg=document.createElement("section");lg.innerHTML=`<h2>MIDI log</h2><div id="log"></div>
-    <p class="note">MIDI is one-way, so most controls show what this page last sent. “USB link” or “Bluetooth” (Chrome/Edge) opens a two-way link instead: the page shows the pedal's live state and every control — Rig settings included — changes the pedal directly. Use “Send all” to push this screen to the pedal. Double-click a slider to reset it. Values marked ≈ are estimates: UA publishes each range’s end points but not the curve between them.</p>`;
+    <p class="note">MIDI is one-way, so most controls show what this page last sent. “USB link” (Chrome/Edge) opens a two-way link instead: the page shows the pedal's live state and every control — Rig settings included — changes the pedal directly. Use “Send all” to push this screen to the pedal. Double-click a slider to reset it. Values marked ≈ are estimates: UA publishes each range’s end points but not the curve between them.</p>`;
   lg.style.gridColumn="1/-1";main.appendChild(lg);
 }
 // ---- Rig Library: a saved Rig = every value on this page + its Program Change slot ----
@@ -356,7 +354,7 @@ let editing=-1;
 function buildRigLib(main){
   const sec=document.createElement("section");sec.style.gridColumn="1/-1";
   sec.innerHTML=`<h2>Rig Library</h2>
-    <p class="note">Set up a sound on this page, send it to the pedal (linked over USB or Bluetooth, every control goes live; over MIDI, Rig-tagged ones need UAFX Control), save it on the pedal and give it a MIDI Program Change slot. Then save it here: <b>Recall</b> sends that Program Change and loads the page back to these values.</p>
+    <p class="note">Set up a sound on this page, send it to the pedal (with USB link on, every control goes live; over MIDI, Rig-tagged ones need UAFX Control), save it on the pedal and give it a MIDI Program Change slot. Then save it here: <b>Recall</b> sends that Program Change and loads the page back to these values.</p>
     <div class="eqgrid" style="margin-top:10px">
       <label>Rig name<input type="text" id="rf_name" placeholder="Gravity Jay"></label>
       <label>Program Change #<input type="number" id="rf_pc" min="0" max="127" placeholder="0–127"></label>
@@ -424,7 +422,7 @@ $("exportBtn").onclick=()=>{const native=window.webkit?.messageHandlers?.midi;if
 $("importBtn").onclick=()=>$("importFile").click();
 $("importFile").onchange=async e=>{try{const o=JSON.parse(await e.target.files[0].text());writeSnaps({...readSnaps(),...o});refreshSnaps();log("Imported snapshots");}catch{log("Import failed — not a valid snapshot file");}};
 
-// ---- Two-way link: USB serial (Web Serial) or Bluetooth (Web Bluetooth) ----
+// ---- Two-way link: USB serial (Web Serial) ----
 // UA's own software talks "UANet" to the pedal — protobuf packets with JSON values. MIDI is send-only, but here
 // values can be read (GET) and set (SET). Port 4715 is the pedal's panel service.
 const UANET_PORT=4715, CRC7=[0,9,18,27,36,45,54,63,72,65,90,83,108,101,126,119,25,16,11,2,61,52,47,38,81,88,67,74,117,124,103,110,50,59,32,41,22,31,4,13,122,115,104,97,94,87,76,69,43,34,57,48,15,6,29,20,99,106,113,120,71,78,85,92,100,109,118,127,64,73,82,91,44,37,62,55,8,1,26,19,125,116,111,102,89,80,75,66,53,60,39,46,17,24,3,10,86,95,68,77,114,123,96,105,30,23,12,5,58,51,40,33,79,70,93,84,107,98,121,112,7,14,21,28,35,42,49,56,65,72,83,90,101,108,119,126,9,0,27,18,45,36,63,54,88,81,74,67,124,117,110,103,16,25,2,11,52,61,38,47,115,122,97,104,87,94,69,76,59,50,41,32,31,22,13,4,106,99,120,113,78,71,92,85,34,43,48,57,6,15,20,29,37,44,55,62,1,8,19,26,109,100,127,118,73,64,91,82,60,53,46,39,24,17,10,3,116,125,102,111,80,89,66,75,23,30,5,12,51,58,33,40,95,86,77,68,123,114,105,96,14,7,28,21,42,35,56,49,70,79,84,93,98,107,112,121];
@@ -438,10 +436,9 @@ const pbV=(no,v)=>[...vint(no<<3),...vint(v)], pbB=(no,b)=>[...vint(no<<3|2),...
 function pbParse(b){const o={};let i=0;const rv=()=>{let v=0,m=1,x;do{x=b[i++];v+=(x&0x7f)*m;m*=128;}while(x&0x80);return v;};
   while(i<b.length){const k=rv(),no=Math.floor(k/8),wt=k&7;let v;if(wt===0)v=rv();else if(wt===2){const L=rv();v=b.subarray(i,i+L);i+=L;}else throw new Error("wiretype "+wt);(o[no]??=[]).push(v);}return o;}
 async function pbStr(b){const m=pbParse(b);if(m[1])return dec.decode(m[1][0]);if(m[2]){const d=pbParse(m[2][0]);const ds=new Blob([d[2][0]]).stream().pipeThrough(new DecompressionStream("deflate"));return await new Response(ds).text();}return "";}
-// Two links carry the same UANet packets (found in UAFX Control 2.3.0 for Android — its @uaudio/transport-ble and
-// emperor-capacitor modules): USB serial = COBS frames with CRC7, handshake = an empty frame the pedal echoes;
-// Bluetooth LE = UA's GATT "serial" service, each write/notification one block with a 3-byte header
-// (24-bit little-endian block number from 1, top bit of byte 3 = more blocks follow), no COBS/CRC.
+// USB serial framing: COBS frames with CRC7, handshake = an empty frame the pedal echoes. (UAFX Control 2.3.0 for
+// Android sends the same UANet packets over Bluetooth — see docs/uafx-protocol.md; from a Mac the pedal shows no
+// notify characteristic, so Bluetooth was dropped.)
 class SerialLink{
   constructor(port){this.port=port;this.buf=[];this.name="USB";this.repeat=0;}
   async open(onPacket){this.onPacket=onPacket;await this.port.open({baudRate:115200});this.writer=this.port.writable.getWriter();this.loop=this.readLoop();
@@ -455,51 +452,6 @@ class SerialLink{
   // Release in order — cancel the reader and wait for its loop to unlock before closing, or close() fails and
   // the port stays held by this tab
   async close(){try{await this.reader?.cancel();await this.loop;this.writer?.releaseLock();await this.port.close();}catch(e){console.warn("serial close:",e);}}
-}
-const BLE_SERVICE="3bf93be5-20d2-47de-96d8-5d6fbb659220",BLE_TO_PEDAL="ef4ede65-1906-4c39-8b88-ca5356090201",
-  BLE_FROM_PEDAL="ef4ede65-1906-4c39-8b88-ca5356090101",BLE_MTU="ef4ede65-1906-4c39-8b88-ca53560a0001",UA_BT_COMPANY=0x09c2,
-  BLE_COMBINED="ef4ede65-1906-4c39-8b88-ca535609c5fd"; // in UA's source, commented out: one characteristic for both directions
-const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-class BleLink{
-  // UA's app re-sends its first request every 200 ms: writes right after connecting can be lost
-  constructor(device){this.device=device;this.blocks=[];this.name="Bluetooth";this.repeat=10;this.q=Promise.resolve();this.block=182;}
-  // Same steps and retries as UA's app: connect, read MTU (0 = not ready yet), read the notify characteristic once
-  // to "prime the pump", then start notifications
-  async open(onPacket){this.onPacket=onPacket;let err;
-    for(let attempt=1;attempt<=4;attempt++){
-      try{await this.connectOnce();return;}
-      catch(e){err=e;console.warn(`ble connect attempt ${attempt}:`,e);try{this.device.gatt.disconnect();}catch{}await sleep(600);}}
-    throw err;}
-  async connectOnce(){
-    const svc=await(await this.device.gatt.connect()).getPrimaryService(BLE_SERVICE);await sleep(200);
-    // Not every pedal shows the Android app's characteristics to a Mac (an OX Stomp had no …0201), so take what the
-    // service has: UA's UUIDs first, then the combined one, then anything that can write / notify
-    const chars=await svc.getCharacteristics(),has=u=>chars.find(c=>c.uuid===u),
-      props=c=>Object.entries({r:"read",w:"write",W:"writeWithoutResponse",n:"notify",i:"indicate"}).filter(([,k])=>c.properties[k]).map(([a])=>a).join("");
-    this.found=chars.map(c=>`${c.uuid.slice(-6)}[${props(c)}]`).join(" ");console.log("ble characteristics:",this.found);
-    const mtu=has(BLE_MTU);
-    // MTU characteristic: u16 LE max, u16 LE usable block size (the pedal's view of the negotiated ATT MTU)
-    if(mtu){const v=new Uint8Array((await mtu.readValue()).buffer);
-      const max=v[0]|v[1]<<8,usable=v[2]|v[3]<<8;if(v.length>=4&&max===0)throw new Error("pedal MTU not ready");
-      if(usable>=23)this.block=Math.min(usable,509);}
-    this.tx=has(BLE_TO_PEDAL)||has(BLE_COMBINED)||chars.find(c=>c!==mtu&&(c.properties.write||c.properties.writeWithoutResponse));
-    const rx=has(BLE_FROM_PEDAL)||has(BLE_COMBINED)||chars.find(c=>c!==mtu&&(c.properties.notify||c.properties.indicate));
-    if(!this.tx||!rx)throw new Error(`no ${this.tx?"notify":"write"} characteristic (service has: ${this.found})`);
-    this.withResponse=!!this.tx.properties.write;
-    try{await rx.readValue();}catch(e){console.warn("ble prime read:",e);}
-    rx.addEventListener("characteristicvaluechanged",e=>this.onBlock(new Uint8Array(e.target.value.buffer)));
-    await rx.startNotifications();await sleep(200);}
-  onBlock(v){const n=v[0]|v[1]<<8|(v[2]&0x7f)<<16,more=v[2]&0x80;
-    if(n!==this.blocks.length+1){this.blocks=[];if(n!==1)return;}
-    this.blocks.push(v.slice(3));if(more)return;
-    const b=new Uint8Array(this.blocks.reduce((t,x)=>t+x.length,0));let o=0;for(const x of this.blocks){b.set(x,o);o+=x.length;}
-    this.blocks=[];this.onPacket(b);}
-  send(b){const room=this.block-3;
-    for(let o=0,k=1;o<b.length;o+=room,k++){const more=o+room<b.length?0x80:0;
-      const blk=Uint8Array.from([k&255,k>>8&255,(k>>16&0x7f)|more,...b.slice(o,o+room)]);
-      this.q=this.q.then(()=>this.withResponse?this.tx.writeValueWithResponse(blk):this.tx.writeValueWithoutResponse(blk)).catch(e=>console.warn("ble write:",e));}
-    return this.q;}
-  async close(){try{this.device.gatt.disconnect();}catch{}}
 }
 class UANet{
   constructor(link){this.link=link;this.uid="router:"+crypto.randomUUID();this.n=0;this.wait=new Map();this.ids={};}
@@ -670,53 +622,23 @@ async function pollLive(){
     catch(e){if(!uanet)break;$("liveStatus").textContent="· "+e.message;}
     await new Promise(r=>setTimeout(r,150));}
 }
-// One link at a time: USB serial or Bluetooth (both Chrome/Edge on a computer)
+// USB serial link (Chrome/Edge on a computer)
 async function disconnectLink(){const u=uanet;uanet=null;rigPaths=null;liveText={};await u.close();
-  $("serialBtn").textContent="USB link";$("bleBtn").textContent="Bluetooth";$("live").hidden=true;paintAll();log(`${u.link.name} link closed`);}
-let btPicked="";
-async function connectLink(kind,showAll=false){
-  if(uanet){const was=uanet.link.name;await disconnectLink();if(was===kind)return;}
-  let link;
+  $("serialBtn").textContent="USB link";$("live").hidden=true;paintAll();log(`${u.link.name} link closed`);}
+async function connectLink(){
+  if(uanet){await disconnectLink();return;}
+  if(!("serial" in navigator)){setStatus("This browser can't open the pedal's USB link — use Chrome or Edge on a computer","err");return;}
   try{
-    if(kind==="USB"){
-      if(!("serial" in navigator)){setStatus("This browser can't open the pedal's USB link — use Chrome or Edge on a computer","err");return;}
-      link=new SerialLink(await navigator.serial.requestPort({filters:[{usbVendorId:0x2b5a}]}));
-    }else{
-      if(!navigator.bluetooth){setStatus("This browser has no Web Bluetooth — use Chrome or Edge on a computer","err");return;}
-      setStatus("Pedal not listed? Press its PAIR button, and disconnect UAFX Control on your phone first");
-      // Chrome on a Mac doesn't always see the advertised name / maker data, so the filtered list can come up
-      // empty — "Show all Bluetooth devices" drops the filter (the pedal may then show by another name or as Unknown)
-      let dev;
-      try{dev=await navigator.bluetooth.requestDevice(showAll?{acceptAllDevices:true,optionalServices:[BLE_SERVICE]}:
-        {filters:[{namePrefix:"UAFX"},{manufacturerData:[{companyIdentifier:UA_BT_COMPANY}]}],optionalServices:[BLE_SERVICE]});}
-      catch(e){if(e.name!=="NotFoundError")throw e;
-        $("bleAllBtn").hidden=false;
-        setStatus(showAll?"No device picked. Pedal still missing? Close UAFX Control on your phone (or turn its Bluetooth off), power-cycle the pedal, press PAIR":
-          "No pedal picked. If it wasn't listed: press PAIR, then try “Show all Bluetooth devices”","err");return;}
-      $("bleAllBtn").hidden=true;
-      btPicked=`"${dev.name??"(no name)"}"`;log(`Bluetooth device picked: ${btPicked} id ${dev.id}`);
-      setStatus(`Connecting to ${dev.name||"pedal"} over Bluetooth…`);
-      dev.addEventListener("gattserverdisconnected",()=>{if(uanet?.link.device===dev){log("Bluetooth disconnected");disconnectLink();}});
-      link=new BleLink(dev);
-    }
+    const link=new SerialLink(await navigator.serial.requestPort({filters:[{usbVendorId:0x2b5a}]}));
     const u=new UANet(link);await u.open();uanet=u;
-    $("live").hidden=false;$(kind==="USB"?"serialBtn":"bleBtn").textContent="Disconnect";
-    setStatus(`Linked over ${link.name} — every control, Rig settings included, now changes the pedal live`,"ok");
-    log(`Linked to the pedal over ${link.name}`);pollLive();
+    $("live").hidden=false;$("serialBtn").textContent="Disconnect";
+    setStatus("Linked over USB — every control, Rig settings included, now changes the pedal live","ok");
+    log("Linked to the pedal over USB");pollLive();
     try{rigPaths=await discoverRig(u);log(`Reading ${Object.keys(rigPaths).length} Rig settings from the pedal`);}catch(e){log("Couldn't read Rig settings: "+e.message);}
-  }catch(e){
-    if(kind==="USB"&&e.name==="NotFoundError")return;
-    if(kind!=="USB"&&/service|characteristic/i.test(e.message))e=new Error(`${btPicked}: ${e.message}`);
-    else if(link?.found)e=new Error(`${e.message} [characteristics: ${link.found}]`);
-    setStatus(`Couldn't link to the pedal over ${kind}: ${e.message}`+(kind==="USB"?"":
-      " — close UAFX Control on your phone, press the pedal's PAIR button and retry; if it still fails, power the pedal off and on"),"err");
-    log(`${kind} link failed: ${e.name}: ${e.message}`);}
+  }catch(e){if(e.name!=="NotFoundError"){setStatus("Couldn't link to the pedal over USB: "+e.message,"err");log(`USB link failed: ${e.name}: ${e.message}`);}}
 }
-$("serialBtn").onclick=()=>connectLink("USB");
-$("bleBtn").onclick=()=>connectLink("Bluetooth");
-$("bleAllBtn").onclick=()=>connectLink("Bluetooth",true);
+$("serialBtn").onclick=connectLink;
 if(!("serial" in navigator))$("serialBtn").style.display="none";
-if(!navigator.bluetooth)$("bleBtn").style.display="none";
 // Live writes, latest value wins per path so a dragged slider doesn't queue up a backlog
 const writing=new Map();
 async function writePath(path,value,port){

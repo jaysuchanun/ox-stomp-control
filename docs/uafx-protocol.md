@@ -22,7 +22,8 @@ for interoperability with Jay's own pedal. Nothing here unlocks paid features or
 
 ## Transport
 
-**Bluetooth LE** (what the phone app uses)
+**Bluetooth LE** (what the phone app uses — not used by the web page: from Chrome on a Mac, Jay's pedal showed this
+service with characteristics `…090301`, `…090401`, `…0a0001` only, none of them notifying, so it can't reply)
 
 - Advertised name starts with `UAFX`, manufacturer data company ID `0x09C2` (carries the serial number).
 - GATT service `3bf93be5-20d2-47de-96d8-5d6fbb659220`
