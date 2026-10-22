@@ -42,6 +42,7 @@ section h2{margin:0 0 10px;font-size:13px;letter-spacing:.12em;text-transform:up
 .row .val:focus{outline:none;border-color:var(--accent);background:var(--bg)}
 .row select{width:100%}
 input[type=range]{width:100%;accent-color:var(--accent)}
+.ends{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:-2px;line-height:1}
 .toggles{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .toggles button{font-size:13px;padding:6px 10px}
 .seg{display:flex;gap:6px;flex-wrap:wrap}
@@ -103,79 +104,80 @@ const ROOMS = ["Condenser Stereo","Ribbon Stereo","Condenser Mono","Condenser 67
 
 const SECTIONS = [
   {title:"Rig & Master", params:[
-    {id:"output",cc:7,label:"Output",type:"range",def:96,unit:"pct"},
+    {id:"output",cc:7,label:"Output",type:"range",def:96,unit:"pct",ends:["off","max"]},
     {id:"drive",cc:21,label:"Speaker Drive",type:"range",def:40,unit:"pct"},
     {id:"cab",cc:20,label:"Cabinet",type:"select",options:CABS,def:15},
   ]},
   {title:"Mic 1", params:[
     {id:"m1",cc:22,label:"Model",type:"select",options:MICS,def:1},
-    {id:"m1vol",cc:23,label:"Volume",type:"range",def:96,unit:"pct"},
-    {id:"m1pan",cc:24,label:"Pan",type:"range",def:64,pan:true},
+    {id:"m1vol",cc:23,label:"Volume",type:"range",def:96,unit:"pct",ends:["off","max"]},
+    {id:"m1pan",cc:24,label:"Pan",type:"range",def:64,pan:true,ends:["L","R"]},
     {id:"m1mute",cc:25,label:"Mute",type:"toggle",def:0},
     {id:"m1axis",cc:26,label:"On Axis",type:"toggle",def:1},
     {id:"m1lc",cc:27,label:"Low Cut",type:"toggle",def:0},
   ]},
   {title:"Mic 2", params:[
     {id:"m2",cc:28,label:"Model",type:"select",options:MICS,def:4},
-    {id:"m2vol",cc:29,label:"Volume",type:"range",def:80,unit:"pct"},
-    {id:"m2pan",cc:30,label:"Pan",type:"range",def:64,pan:true},
+    {id:"m2vol",cc:29,label:"Volume",type:"range",def:80,unit:"pct",ends:["off","max"]},
+    {id:"m2pan",cc:30,label:"Pan",type:"range",def:64,pan:true,ends:["L","R"]},
     {id:"m2mute",cc:31,label:"Mute",type:"toggle",def:0},
     {id:"m2axis",cc:32,label:"On Axis",type:"toggle",def:1},
     {id:"m2lc",cc:33,label:"Low Cut",type:"toggle",def:0},
   ]},
   {title:"Room", params:[
     {id:"room",cc:34,label:"Room Mic",type:"select",options:ROOMS,def:0},
-    {id:"roomlvl",cc:35,label:"Level",type:"range",def:40,unit:"pct"},
-    {id:"roompan",cc:36,label:"Pan",type:"range",def:64,pan:true},
+    {id:"roomlvl",cc:35,label:"Level",type:"range",def:40,unit:"pct",ends:["off","max"]},
+    {id:"roompan",cc:36,label:"Pan",type:"range",def:64,pan:true,ends:["L","R"]},
     {id:"roommute",cc:37,label:"Mute",type:"toggle",def:0},
     {id:"roomdamp",cc:38,label:"Damp",type:"toggle",def:0},
     {id:"roomlc",cc:39,label:"Low Cut",type:"toggle",def:0},
   ]},
   {title:"Master EQ", note:"Post-cabinet EQ for the whole Rig, laid out like UAFX Control. Band frequencies for the Default Rig: Low 120 Hz · Low-Mid 400 Hz · Mid 900 Hz · High 4 kHz (they vary per Rig and the app doesn't expose them).", params:[
     {id:"eqon",label:"Master EQ",type:"toggle",def:1,nomidi:true},
-    {id:"eqhigh",label:"High · 4k",type:"range",def:64,unit:"db10",nomidi:true},
-    {id:"eqmid",label:"Mid · 900",type:"range",def:64,unit:"db10",nomidi:true},
-    {id:"eqlomid",label:"Low-Mid · 400",type:"range",def:64,unit:"db10",nomidi:true},
-    {id:"eqlow",label:"Low · 120",type:"range",def:64,unit:"db10",nomidi:true},
+    {id:"eqhigh",label:"High · 4k",type:"range",def:64,unit:"db10",nomidi:true,ends:["-10 dB","+10 dB"]},
+    {id:"eqmid",label:"Mid · 900",type:"range",def:64,unit:"db10",nomidi:true,ends:["-10 dB","+10 dB"]},
+    {id:"eqlomid",label:"Low-Mid · 400",type:"range",def:64,unit:"db10",nomidi:true,ends:["-10 dB","+10 dB"]},
+    {id:"eqlow",label:"Low · 120",type:"range",def:64,unit:"db10",nomidi:true,ends:["-10 dB","+10 dB"]},
     {id:"eqhion",label:"High band",type:"toggle",def:1,nomidi:true},
     {id:"eqmidon",label:"Mid band",type:"toggle",def:1,nomidi:true},
     {id:"eqlomidon",label:"Low-Mid band",type:"toggle",def:1,nomidi:true},
     {id:"eqlowon",label:"Low band",type:"toggle",def:1,nomidi:true},
-    {id:"eqhicut",label:"High Cut",type:"range",def:127,unit:"hiCut",nomidi:true},
-    {id:"eqlocut",label:"Low Cut",type:"range",def:0,unit:"loCut",nomidi:true},
+    {id:"eqhicut",label:"High Cut",type:"range",def:127,unit:"hiCut",nomidi:true,ends:["20 Hz","off"]},
+    {id:"eqlocut",label:"Low Cut",type:"range",def:0,unit:"loCut",nomidi:true,ends:["off","16 kHz"]},
   ]},
   {title:"1176 Compressor", note:"Applied to the whole Rig. As on a real 1176, Attack and Release get faster as the number goes up.", params:[
     {id:"cmpon",label:"Compressor",type:"toggle",def:0,nomidi:true},
-    {id:"cmpin",label:"Input",type:"range",def:48,unit:"pct",nomidi:true},
-    {id:"cmpout",label:"Output",type:"range",def:64,unit:"pct",nomidi:true},
-    {id:"cmpatk",label:"Attack",type:"range",def:64,unit:"atk1176",nomidi:true},
-    {id:"cmprel",label:"Release",type:"range",def:64,unit:"rel1176",nomidi:true},
+    {id:"cmpin",label:"Input",type:"range",def:48,unit:"pct",nomidi:true,ends:["off","max"]},
+    {id:"cmpout",label:"Output",type:"range",def:64,unit:"pct",nomidi:true,ends:["off","max"]},
+    {id:"cmpatk",label:"Attack",type:"range",def:64,unit:"atk1176",nomidi:true,ends:["slow","fast"]},
+    {id:"cmprel",label:"Release",type:"range",def:64,unit:"rel1176",nomidi:true,ends:["slow","fast"]},
     {id:"cmpratio",label:"Ratio",type:"select",options:["4:1","8:1","12:1","20:1","All"],def:0,nomidi:true},
   ]},
   {title:"Delay", note:"Full delay layout from UAFX Control. Controls tagged CC change the pedal over MIDI; controls tagged Rig have no MIDI CC — they change the pedal live once it's linked (USB link). Over MIDI only, they're kept with your snapshots as a record.", params:[
     {id:"dly",cc:40,label:"Enable",type:"toggle",def:1},
     {id:"dmode",label:"Mode",type:"select",options:["Dual","Crossover","Ping Pong","Chorus","Flanger"],def:0,nomidi:true},
-    {id:"dlytime",cc:41,label:"Time A",type:"range",def:22,unit:"delayTime"},
-    {id:"dlytimeb",label:"Time B",type:"range",def:22,unit:"delayTime",nomidi:true,linkedTo:"dlytime",linkKey:"dlink"},
+    {id:"dlytime",cc:41,label:"Time A",type:"range",def:22,unit:"delayTime",ends:()=>["0.14 ms",delayMaxLabel()]},
+    {id:"dlytimeb",label:"Time B",type:"range",def:22,unit:"delayTime",nomidi:true,linkedTo:"dlytime",linkKey:"dlink",ends:()=>["0.14 ms",delayMaxLabel()]},
     {id:"dlink",label:"Link Delay Times",type:"toggle",def:1,nomidi:true},
-    {id:"dpana",label:"Pan A",type:"range",def:0,pan:true,nomidi:true},
-    {id:"dpanb",label:"Pan B",type:"range",def:127,pan:true,nomidi:true,mirrorOf:"dpana",linkKey:"dlinkpan"},
+    {id:"dpana",label:"Pan A",type:"range",def:0,pan:true,nomidi:true,ends:["L","R"]},
+    {id:"dpanb",label:"Pan B",type:"range",def:127,pan:true,nomidi:true,mirrorOf:"dpana",linkKey:"dlinkpan",ends:["L","R"]},
     {id:"dlinkpan",label:"Link Pan",type:"toggle",def:1,nomidi:true},
-    {id:"dlyfb",cc:42,label:"Feedback",type:"range",def:88,unit:"bipolar"},
-    {id:"dlymix",cc:44,label:"Mix",type:"range",def:74,unit:"bipolar"},
+    {id:"dlyfb",cc:42,label:"Feedback",type:"range",def:88,unit:"bipolar",exact:true,appUnit:true,ends:["-100%","+100%"]},
+    {id:"dlymix",cc:44,label:"Mix",type:"range",def:74,unit:"bipolar",exact:true,appUnit:true,ends:["-100%","+100%"]},
     {id:"dlfo",label:"LFO Shape",type:"select",options:["Sine 0","Sine 90","Sine 180","Tri 0","Tri 90","Tri 180"],def:0,nomidi:true},
-    {id:"dmodrate",label:"Mod Rate",type:"range",def:0,unit:"offPct",nomidi:true},
-    {id:"dmoddepth",label:"Mod Depth",type:"range",def:0,unit:"offPct",nomidi:true},
-    {id:"dhicut",label:"High Cut",type:"range",def:99,unit:"hiCut",nomidi:true},
-    {id:"dlocut",label:"Low Cut",type:"range",def:40,unit:"loCut",nomidi:true},
+    {id:"dmodrate",label:"Mod Rate",type:"range",def:0,unit:"offPct",nomidi:true,ends:["off","max"]},
+    {id:"dmoddepth",label:"Mod Depth",type:"range",def:0,unit:"offPct",nomidi:true,ends:["off","max"]},
+    {id:"dhicut",label:"High Cut",type:"range",def:99,unit:"hiCut",nomidi:true,ends:["20 Hz","off"]},
+    {id:"dlocut",label:"Low Cut",type:"range",def:40,unit:"loCut",nomidi:true,ends:["off","16 kHz"]},
   ]},
   {title:"Reverb", note:"Stereo plate reverb on the whole Rig. UA notes the Mix control is 15% wet at its halfway point for finer low-level control.", params:[
     {id:"rev",cc:60,label:"Enable",type:"toggle",def:0},
-    {id:"revtime",cc:61,label:"Decay",type:"range",def:50,unit:"pct"},
-    {id:"revbal",label:"Balance",type:"range",def:64,pan:true,nomidi:true},
-    {id:"revmix",cc:63,label:"Mix",type:"range",def:40,unit:"revMix"},
-    {id:"revtreb",label:"Treble",type:"range",def:64,unit:"bipolar",nomidi:true},
-    {id:"revbass",label:"Bass",type:"range",def:64,unit:"bipolar",nomidi:true},
+    {id:"revtime",cc:61,label:"Decay",type:"range",def:50,unit:"revTime",ends:["0.5 s","5.5 s"]},
+    {id:"revpre",label:"Pre-Delay",type:"range",def:0,unit:"preDelay",nomidi:true,ends:["0 ms","250 ms"]},
+    {id:"revbal",label:"Balance",type:"range",def:64,pan:true,nomidi:true,ends:["L","R"]},
+    {id:"revmix",cc:63,label:"Mix",type:"range",def:40,unit:"revMix",ends:["dry","wet"]},
+    {id:"revtreb",label:"Treble",type:"range",def:64,unit:"bipolar",nomidi:true,ends:["cut","boost"]},
+    {id:"revbass",label:"Bass",type:"range",def:64,unit:"bipolar",nomidi:true,ends:["cut","boost"]},
   ]},
 ];
 const PARAMS = SECTIONS.flatMap(s=>s.params);
@@ -235,12 +237,16 @@ $("output").onchange=selectOutput;
 const hz=f=>f>=1000?(f/1000).toFixed(f>=10000?0:1)+" kHz":Math.round(f)+" Hz";
 const UNITS = {
   // 0.14 ms – 3 s, assumed logarithmic (typical for delay-time controls)
-  delayTime:v=>{const ms=0.14*Math.pow(3000/0.14,v/127);return ms>=1000?(ms/1000).toFixed(2)+" s":ms>=10?Math.round(ms)+" ms":ms.toFixed(1)+" ms";},
+  // Max depends on Mode (UAFX Control: Dual/Crossover/Ping Pong 3 s, Chorus 125 ms, Flanger 45 ms)
+  delayTime:v=>{const ms=0.14*Math.pow(delayMaxMs()/0.14,v/127);return ms>=1000?(ms/1000).toFixed(2)+" s":ms>=10?Math.round(ms)+" ms":ms.toFixed(1)+" ms";},
   // -100% … +100%, centre = 0 (app labels)
   bipolar:v=>{const p=Math.round((v-64)/63*100);return (p>0?"+":"")+Math.max(-100,Math.min(100,p))+"%";},
   // Manual: reverb mix is 15% wet at the halfway point → piecewise-linear guess
   revMix:v=>{const w=v<=64?v/64*15:15+(v-64)/63*85;return Math.round(w)+"% wet";},
   pct:v=>Math.round(v/127*100)+"%",
+  // Plate: Decay 0.5–5.5 s, Pre-Delay 0–250 ms (UAFX Control's end labels; linear assumed)
+  revTime:v=>(0.5+5*v/127).toFixed(1)+" s",
+  preDelay:v=>Math.round(v/127*250)+" ms",
   db10:v=>{const d=Math.round((v-64)/63*100)/10;const c=Math.max(-10,Math.min(10,d));return (c>0?"+":"")+c.toFixed(1)+" dB";},
   // 1176: attack ≈800 µs (slow, 1) → ≈20 µs (fast, 7); release ≈1.1 s (1) → ≈50 ms (7)
   atk1176:v=>{const us=800*Math.pow(20/800,v/127);return Math.round(us)+" µs";},
@@ -293,7 +299,7 @@ async function seekPedal(p,want){
 }
 async function typeValue(p,t){
   t=t.trim();const label=`${p.label} = ${t}`;
-  if(uanet&&!/^off$/i.test(t)&&liveWrites(p,64,state).length){
+  if(uanet&&!p.appUnit&&!/^off$/i.test(t)&&liveWrites(p,64,state).length){
     try{
       const now=(await readCtl(ctlPath(p))).s,tu=unitOf(t),pu=unitOf(now);
       // A bare number is read in the pedal's displayed unit: "369" → ms, "2" on a "1.9 s" control → s, "4" on "5.85 k" → kHz
@@ -314,6 +320,8 @@ async function typeValue(p,t){
   if(v==null){log(`Couldn't read "${t}" as a value for ${p.label}`);paint(p);return;}
   state[p.id]=uanet?v:Math.round(v);delete liveText[p.id];sendParam(p,label);applyLinks();paint(p);
 }
+const delayMaxMs=()=>[3000,3000,3000,125,45][state.dmode??0]??3000;
+const delayMaxLabel=()=>{const m=delayMaxMs();return m>=1000?m/1000+" s":m+" ms";};
 function fmt(p,v){
   if(p.pan){const d=Math.round(v-64);return d===0?"C":(d<0?"L"+(-d):"R"+d);}
   if(p.unit){const t=UNITS[p.unit](v);return (p.exact||t==="off"?"":"≈")+t;}
@@ -386,7 +394,8 @@ function build(){
       if(p.type==="select"){
         ctl=document.createElement("select");
         p.options.forEach((o,i)=>ctl.add(new Option(o,i)));
-        ctl.onchange=()=>{state[p.id]=Number(ctl.value);sendParam(p,`${s.title} ${p.label}: ${p.options[state[p.id]]}`);paint(p);};
+        ctl.onchange=()=>{state[p.id]=Number(ctl.value);sendParam(p,`${s.title} ${p.label}: ${p.options[state[p.id]]}`);paint(p);
+          if(p.id==="dmode")["dlytime","dlytimeb"].forEach(id=>paint(P(id)));};
       }else{
         ctl=document.createElement("input");ctl.type="range";ctl.min=0;ctl.max=127;
         let last=null;
@@ -397,8 +406,10 @@ function build(){
           applyLinks();};
         ctl.ondblclick=()=>{state[p.id]=p.def;paint(p);sendParam(p,`${s.title} ${p.label} (reset)`);applyLinks();};
       }
-      ui[p.id]={ctl,val};
-      row.append(lab,ctl,val);sec.appendChild(row);
+      let mid=ctl,ends=null;
+      if(p.ends){mid=document.createElement("div");ends=document.createElement("div");ends.className="ends";mid.append(ctl,ends);}
+      ui[p.id]={ctl,val,ends};
+      row.append(lab,mid,val);sec.appendChild(row);
     }
     if(tg.children.length)sec.appendChild(tg);
     main.appendChild(sec);
@@ -468,7 +479,8 @@ function renderRigs(){
 function paint(p){
   const u=ui[p.id],v=state[p.id];
   if(p.type==="toggle"){u.classList.toggle("on",!!v);return;}
-  u.ctl.value=v;if(p.type!=="select"&&document.activeElement!==u.val)u.val.value=liveText[p.id]??fmt(p,v);
+  u.ctl.value=v;if(p.type!=="select"&&document.activeElement!==u.val)u.val.value=(p.appUnit?null:liveText[p.id])??fmt(p,v);
+  if(u.ends){const[a,b]=typeof p.ends==="function"?p.ends():p.ends;u.ends.innerHTML=`<span>${a}</span><span>${b}</span>`;}
   if(p.linkKey){const locked=!!state[p.linkKey];u.ctl.disabled=locked;u.ctl.title=locked?"Linked — turn off the link to adjust separately":"";}
 }
 function paintBypass(){document.querySelectorAll("#byp button").forEach(b=>b.classList.toggle("on",Number(b.dataset.v)===state.bypass));}
@@ -585,7 +597,7 @@ const WRITE_MAP={ // page id: [bus, control] | {panel: emperor_state property}
   dlinkpan:["master",DLY+"pan_link"],dlyfb:["master",DLY+"recirc"],dlymix:["master",DLY+"mix"],dlfo:["master",DLY+"lfo"],
   dmodrate:["master",DLY+"rate"],dmoddepth:["master",DLY+"depth"],dhicut:["master",DLY+"lo_pass"],dlocut:["master",DLY+"hi_pass"],
   rev:["master",REV+"power"],revtime:["master",REV+"reverb_time"],revbal:["master",REV+"balance"],revmix:["master",REV+"mix"],
-  revtreb:["master",REV+"treble"],revbass:["master",REV+"bass"],
+  revtreb:["master",REV+"treble"],revbass:["master",REV+"bass"],revpre:["master",REV+"pre_delay"],
 };
 // [path, value, port] writes for page control p at page value v (0–127, an option index, or 0/1)
 function liveWrites(p,v,st){const m=WRITE_MAP[p.id];if(!m)return[];
@@ -649,6 +661,7 @@ const RIG_MAP={ // page id: [strip, plugin|"out"|"fx", control, opts]
   rev:["MASTER","uaudio_plate_140_ox_pedal","power"], revtime:["MASTER","uaudio_plate_140_ox_pedal","reverb_time"],
   revbal:["MASTER","uaudio_plate_140_ox_pedal","balance",{fmt:1}], revmix:["MASTER","uaudio_plate_140_ox_pedal","mix"],
   revtreb:["MASTER","uaudio_plate_140_ox_pedal","treble"], revbass:["MASTER","uaudio_plate_140_ox_pedal","bass"],
+  revpre:["MASTER","uaudio_plate_140_ox_pedal","pre_delay"],
 };
 let rigPaths=null, rigCursor=0, liveText={};
 async function discoverRig(u){
@@ -674,6 +687,7 @@ async function readRigParam(u,id){
   const v=P.type==="toggle"?(norm>=.5?1:0):P.type==="select"?Math.round(norm*(P.options.length-1)):norm*127;
   const u_=ui[id];if(u_?.ctl&&(document.activeElement===u_.ctl||document.activeElement===u_.val))return; // don't fight a control being dragged or typed in
   state[id]=v;if(text&&!r.o.fmt)liveText[id]=text;else delete liveText[id];paint(P);
+  if(id==="dmode")["dlytime","dlytimeb"].forEach(k=>paint(PARAMS.find(q=>q.id===k))); // range follows Mode
 }
 function ledColor(v){const u=v>>>0,r=u>>>24,g=(u>>>16)&255,b=(u>>>8)&255;return r|g|b?`rgb(${r},${g},${b})`:"";}
 function renderLive(vals){

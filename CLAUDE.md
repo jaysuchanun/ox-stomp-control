@@ -85,6 +85,13 @@ modeled on UA's UAFX Control app. Jay is an electrical engineer (embedded / ESP3
   ≈ estimate. Not linked: `fromText` inverts the ≈ curves (snaps to 128 MIDI steps). Seek tested against a simulated
   pedal only; pedal shows 1176 input/output/attack/release as bare numbers and delay Feedback as "1.4 s" — unchecked.
 
+- **Ranges from UAFX Control's sliders (2026-10-21)** — each range param has `ends:[min,max]` shown under the slider,
+  taken from `ox-editor.html` slider-left/right-label: levels/1176 in-out off…max, pans L…R, EQ ±10 dB, High Cut 20 Hz…off,
+  Low Cut off…16 kHz, 1176 attack/release slow…fast, delay Feedback/Mix −100…+100 % (linear → shown exact, `appUnit`
+  ignores the pedal's own text which reads oddly, e.g. Feedback "1.4 s"), Mod off…max, Plate Decay 0.5–5.5 s, Pre-Delay
+  0–250 ms (added, `revpre`), Mix dry…wet, Treble/Bass cut…boost. **Delay time max depends on Mode**: Dual/Crossover/
+  Ping Pong 3 s, Chorus 125 ms, Flanger 45 ms (`delayMaxMs`). The app also has per-mic and room EQ + cuts (not on the page).
+
 ## OX Stomp MIDI CC map (UA OX Stomp manual, fw 2.0)
 7 Output · 12 FS Left (manual says 1 = press; pedal needs 127, page sends 127 then 0) · 13 FS Right (same) · 19 Bypass (0 bypass, 1 L FS, 2 R FS) · 20 Cab (0–21) ·
 21 Speaker Drive · 22 Mic1 model (0–6) · 23 Mic1 Vol · 24 Mic1 Pan · 25 Mic1 Mute · 26 Mic1 Axis (0 off, 1 on) ·
