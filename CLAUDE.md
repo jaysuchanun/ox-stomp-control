@@ -72,6 +72,8 @@ modeled on UA's UAFX Control app. Jay is an electrical engineer (embedded / ESP3
   **Bluetooth not yet working on the pedal** (2026-10-21: Jay tried, USB fine). A new device only gets in after the pedal's
   **PAIR button** is pressed (UA's own scan/error text); recovery = forget pedal in OS Bluetooth, power-cycle, PAIR.
   BleLink now mirrors the app's connect steps (MTU max 0 = not ready, priming read of the notify char, 4 retries).
+  Then: chooser opened but the pedal wasn't listed even after PAIR → added "Show all Bluetooth devices" (acceptAllDevices,
+  shown after a miss); the picked device's name/id is logged so the real advertised name can go into the filter.
   Can't test headless here: macOS kills any process from Claude Code that touches Bluetooth (SIGABRT, no TCC permission).
   Verified in Chrome on the Mac 2026-10-21: the live panel follows the LEDs, Rig knob and knobs.
   On Jay's pedal `midi_cc_map` shows **Cab has no CC assigned (-1)**, so CC20 does nothing until set in UAFX Control.

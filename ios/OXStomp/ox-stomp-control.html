@@ -77,6 +77,7 @@ input[type=range]:disabled{opacity:.45}
     <label class="status">Ch <select id="channel"></select></label>
     <button id="serialBtn" title="Two-way link over the pedal's USB port: reads its live state and sets every control, Rig settings included (Chrome/Edge)">USB link</button>
     <button id="bleBtn" title="Same two-way link, wireless, over the pedal's Bluetooth — no cable (Chrome/Edge)">Bluetooth</button>
+    <button id="bleAllBtn" hidden title="Bluetooth chooser without the UAFX filter — for when the pedal isn't listed">Show all Bluetooth devices</button>
     <button id="sendAll" title="Send every value on screen to the pedal">Send all</button>
     <select id="snapList" title="Saved snapshots"><option value="">Snapshots…</option></select>
     <button id="snapLoad">Load</button>
@@ -662,7 +663,7 @@ async function pollLive(){
 // One link at a time: USB serial or Bluetooth (both Chrome/Edge on a computer)
 async function disconnectLink(){const u=uanet;uanet=null;rigPaths=null;liveText={};await u.close();
   $("serialBtn").textContent="USB link";$("bleBtn").textContent="Bluetooth";$("live").hidden=true;paintAll();log(`${u.link.name} link closed`);}
-async function connectLink(kind){
+async function connectLink(kind,showAll=false){
   if(uanet){const was=uanet.link.name;await disconnectLink();if(was===kind)return;}
   try{
     let link;
@@ -672,7 +673,17 @@ async function connectLink(kind){
     }else{
       if(!navigator.bluetooth){setStatus("This browser has no Web Bluetooth — use Chrome or Edge on a computer","err");return;}
       setStatus("Pedal not listed? Press its PAIR button, and disconnect UAFX Control on your phone first");
-      const dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:"UAFX"},{manufacturerData:[{companyIdentifier:UA_BT_COMPANY}]}],optionalServices:[BLE_SERVICE]});
+      // Chrome on a Mac doesn't always see the advertised name / maker data, so the filtered list can come up
+      // empty — "Show all Bluetooth devices" drops the filter (the pedal may then show by another name or as Unknown)
+      let dev;
+      try{dev=await navigator.bluetooth.requestDevice(showAll?{acceptAllDevices:true,optionalServices:[BLE_SERVICE]}:
+        {filters:[{namePrefix:"UAFX"},{manufacturerData:[{companyIdentifier:UA_BT_COMPANY}]}],optionalServices:[BLE_SERVICE]});}
+      catch(e){if(e.name!=="NotFoundError")throw e;
+        $("bleAllBtn").hidden=false;
+        setStatus(showAll?"No device picked. Pedal still missing? Close UAFX Control on your phone (or turn its Bluetooth off), power-cycle the pedal, press PAIR":
+          "No pedal picked. If it wasn't listed: press PAIR, then try “Show all Bluetooth devices”","err");return;}
+      $("bleAllBtn").hidden=true;
+      log(`Bluetooth device picked: "${dev.name??""}" id ${dev.id}`);
       setStatus(`Connecting to ${dev.name||"pedal"} over Bluetooth…`);
       dev.addEventListener("gattserverdisconnected",()=>{if(uanet?.link.device===dev){log("Bluetooth disconnected");disconnectLink();}});
       link=new BleLink(dev);
@@ -683,13 +694,15 @@ async function connectLink(kind){
     log(`Linked to the pedal over ${link.name}`);pollLive();
     try{rigPaths=await discoverRig(u);log(`Reading ${Object.keys(rigPaths).length} Rig settings from the pedal`);}catch(e){log("Couldn't read Rig settings: "+e.message);}
   }catch(e){
-    if(e.name==="NotFoundError"){if(kind!=="USB")setStatus("No pedal picked. If it wasn't listed, press its PAIR button and try again","err");return;}
+    if(kind==="USB"&&e.name==="NotFoundError")return;
+    if(kind!=="USB"&&/service/i.test(e.message))e=new Error("that device doesn't have UA's pedal service — pick the pedal (try “Show all Bluetooth devices”)");
     setStatus(`Couldn't link to the pedal over ${kind}: ${e.message}`+(kind==="USB"?"":
       " — close UAFX Control on your phone, press the pedal's PAIR button and retry; if it still fails, power the pedal off and on"),"err");
     log(`${kind} link failed: ${e.name}: ${e.message}`);}
 }
 $("serialBtn").onclick=()=>connectLink("USB");
 $("bleBtn").onclick=()=>connectLink("Bluetooth");
+$("bleAllBtn").onclick=()=>connectLink("Bluetooth",true);
 if(!("serial" in navigator))$("serialBtn").style.display="none";
 if(!navigator.bluetooth)$("bleBtn").style.display="none";
 // Live writes, latest value wins per path so a dragged slider doesn't queue up a backlog
