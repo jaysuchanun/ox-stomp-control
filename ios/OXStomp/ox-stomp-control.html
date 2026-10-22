@@ -457,16 +457,27 @@ class SerialLink{
 }
 const BLE_SERVICE="3bf93be5-20d2-47de-96d8-5d6fbb659220",BLE_TO_PEDAL="ef4ede65-1906-4c39-8b88-ca5356090201",
   BLE_FROM_PEDAL="ef4ede65-1906-4c39-8b88-ca5356090101",BLE_MTU="ef4ede65-1906-4c39-8b88-ca53560a0001",UA_BT_COMPANY=0x09c2;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 class BleLink{
   // UA's app re-sends its first request every 200 ms: writes right after connecting can be lost
   constructor(device){this.device=device;this.blocks=[];this.name="Bluetooth";this.repeat=10;this.q=Promise.resolve();this.block=182;}
-  async open(onPacket){this.onPacket=onPacket;
-    const svc=await(await this.device.gatt.connect()).getPrimaryService(BLE_SERVICE);
+  // Same steps and retries as UA's app: connect, read MTU (0 = not ready yet), read the notify characteristic once
+  // to "prime the pump", then start notifications
+  async open(onPacket){this.onPacket=onPacket;let err;
+    for(let attempt=1;attempt<=4;attempt++){
+      try{await this.connectOnce();return;}
+      catch(e){err=e;console.warn(`ble connect attempt ${attempt}:`,e);try{this.device.gatt.disconnect();}catch{}await sleep(600);}}
+    throw err;}
+  async connectOnce(){
+    const svc=await(await this.device.gatt.connect()).getPrimaryService(BLE_SERVICE);await sleep(200);
     // MTU characteristic: u16 LE max, u16 LE usable block size (the pedal's view of the negotiated ATT MTU)
-    try{const v=new Uint8Array((await(await svc.getCharacteristic(BLE_MTU)).readValue()).buffer);const usable=v[2]|v[3]<<8;if(usable>=23)this.block=Math.min(usable,509);}catch{}
+    const v=new Uint8Array((await(await svc.getCharacteristic(BLE_MTU)).readValue()).buffer);
+    const max=v[0]|v[1]<<8,usable=v[2]|v[3]<<8;if(v.length>=4&&max===0)throw new Error("pedal MTU not ready");
+    if(usable>=23)this.block=Math.min(usable,509);
     this.tx=await svc.getCharacteristic(BLE_TO_PEDAL);const rx=await svc.getCharacteristic(BLE_FROM_PEDAL);
+    try{await rx.readValue();}catch(e){console.warn("ble prime read:",e);}
     rx.addEventListener("characteristicvaluechanged",e=>this.onBlock(new Uint8Array(e.target.value.buffer)));
-    await rx.startNotifications();}
+    await rx.startNotifications();await sleep(200);}
   onBlock(v){const n=v[0]|v[1]<<8|(v[2]&0x7f)<<16,more=v[2]&0x80;
     if(n!==this.blocks.length+1){this.blocks=[];if(n!==1)return;}
     this.blocks.push(v.slice(3));if(more)return;
@@ -660,6 +671,7 @@ async function connectLink(kind){
       link=new SerialLink(await navigator.serial.requestPort({filters:[{usbVendorId:0x2b5a}]}));
     }else{
       if(!navigator.bluetooth){setStatus("This browser has no Web Bluetooth — use Chrome or Edge on a computer","err");return;}
+      setStatus("Pedal not listed? Press its PAIR button, and disconnect UAFX Control on your phone first");
       const dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:"UAFX"},{manufacturerData:[{companyIdentifier:UA_BT_COMPANY}]}],optionalServices:[BLE_SERVICE]});
       setStatus(`Connecting to ${dev.name||"pedal"} over Bluetooth…`);
       dev.addEventListener("gattserverdisconnected",()=>{if(uanet?.link.device===dev){log("Bluetooth disconnected");disconnectLink();}});
@@ -670,7 +682,11 @@ async function connectLink(kind){
     setStatus(`Linked over ${link.name} — every control, Rig settings included, now changes the pedal live`,"ok");
     log(`Linked to the pedal over ${link.name}`);pollLive();
     try{rigPaths=await discoverRig(u);log(`Reading ${Object.keys(rigPaths).length} Rig settings from the pedal`);}catch(e){log("Couldn't read Rig settings: "+e.message);}
-  }catch(e){if(e.name!=="NotFoundError")setStatus(`Couldn't link to the pedal over ${kind}: `+e.message,"err");}
+  }catch(e){
+    if(e.name==="NotFoundError"){if(kind!=="USB")setStatus("No pedal picked. If it wasn't listed, press its PAIR button and try again","err");return;}
+    setStatus(`Couldn't link to the pedal over ${kind}: ${e.message}`+(kind==="USB"?"":
+      " — close UAFX Control on your phone, press the pedal's PAIR button and retry; if it still fails, power the pedal off and on"),"err");
+    log(`${kind} link failed: ${e.name}: ${e.message}`);}
 }
 $("serialBtn").onclick=()=>connectLink("USB");
 $("bleBtn").onclick=()=>connectLink("Bluetooth");
