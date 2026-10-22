@@ -457,7 +457,8 @@ class SerialLink{
   async close(){try{await this.reader?.cancel();await this.loop;this.writer?.releaseLock();await this.port.close();}catch(e){console.warn("serial close:",e);}}
 }
 const BLE_SERVICE="3bf93be5-20d2-47de-96d8-5d6fbb659220",BLE_TO_PEDAL="ef4ede65-1906-4c39-8b88-ca5356090201",
-  BLE_FROM_PEDAL="ef4ede65-1906-4c39-8b88-ca5356090101",BLE_MTU="ef4ede65-1906-4c39-8b88-ca53560a0001",UA_BT_COMPANY=0x09c2;
+  BLE_FROM_PEDAL="ef4ede65-1906-4c39-8b88-ca5356090101",BLE_MTU="ef4ede65-1906-4c39-8b88-ca53560a0001",UA_BT_COMPANY=0x09c2,
+  BLE_COMBINED="ef4ede65-1906-4c39-8b88-ca535609c5fd"; // in UA's source, commented out: one characteristic for both directions
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 class BleLink{
   // UA's app re-sends its first request every 200 ms: writes right after connecting can be lost
@@ -471,11 +472,20 @@ class BleLink{
     throw err;}
   async connectOnce(){
     const svc=await(await this.device.gatt.connect()).getPrimaryService(BLE_SERVICE);await sleep(200);
+    // Not every pedal shows the Android app's characteristics to a Mac (an OX Stomp had no …0201), so take what the
+    // service has: UA's UUIDs first, then the combined one, then anything that can write / notify
+    const chars=await svc.getCharacteristics(),has=u=>chars.find(c=>c.uuid===u),
+      props=c=>Object.entries({r:"read",w:"write",W:"writeWithoutResponse",n:"notify",i:"indicate"}).filter(([,k])=>c.properties[k]).map(([a])=>a).join("");
+    this.found=chars.map(c=>`${c.uuid.slice(-6)}[${props(c)}]`).join(" ");console.log("ble characteristics:",this.found);
+    const mtu=has(BLE_MTU);
     // MTU characteristic: u16 LE max, u16 LE usable block size (the pedal's view of the negotiated ATT MTU)
-    const v=new Uint8Array((await(await svc.getCharacteristic(BLE_MTU)).readValue()).buffer);
-    const max=v[0]|v[1]<<8,usable=v[2]|v[3]<<8;if(v.length>=4&&max===0)throw new Error("pedal MTU not ready");
-    if(usable>=23)this.block=Math.min(usable,509);
-    this.tx=await svc.getCharacteristic(BLE_TO_PEDAL);const rx=await svc.getCharacteristic(BLE_FROM_PEDAL);
+    if(mtu){const v=new Uint8Array((await mtu.readValue()).buffer);
+      const max=v[0]|v[1]<<8,usable=v[2]|v[3]<<8;if(v.length>=4&&max===0)throw new Error("pedal MTU not ready");
+      if(usable>=23)this.block=Math.min(usable,509);}
+    this.tx=has(BLE_TO_PEDAL)||has(BLE_COMBINED)||chars.find(c=>c!==mtu&&(c.properties.write||c.properties.writeWithoutResponse));
+    const rx=has(BLE_FROM_PEDAL)||has(BLE_COMBINED)||chars.find(c=>c!==mtu&&(c.properties.notify||c.properties.indicate));
+    if(!this.tx||!rx)throw new Error(`no ${this.tx?"notify":"write"} characteristic (service has: ${this.found})`);
+    this.withResponse=!!this.tx.properties.write;
     try{await rx.readValue();}catch(e){console.warn("ble prime read:",e);}
     rx.addEventListener("characteristicvaluechanged",e=>this.onBlock(new Uint8Array(e.target.value.buffer)));
     await rx.startNotifications();await sleep(200);}
@@ -487,7 +497,7 @@ class BleLink{
   send(b){const room=this.block-3;
     for(let o=0,k=1;o<b.length;o+=room,k++){const more=o+room<b.length?0x80:0;
       const blk=Uint8Array.from([k&255,k>>8&255,(k>>16&0x7f)|more,...b.slice(o,o+room)]);
-      this.q=this.q.then(()=>this.tx.writeValueWithResponse(blk)).catch(e=>console.warn("ble write:",e));}
+      this.q=this.q.then(()=>this.withResponse?this.tx.writeValueWithResponse(blk):this.tx.writeValueWithoutResponse(blk)).catch(e=>console.warn("ble write:",e));}
     return this.q;}
   async close(){try{this.device.gatt.disconnect();}catch{}}
 }
@@ -666,8 +676,8 @@ async function disconnectLink(){const u=uanet;uanet=null;rigPaths=null;liveText=
 let btPicked="";
 async function connectLink(kind,showAll=false){
   if(uanet){const was=uanet.link.name;await disconnectLink();if(was===kind)return;}
+  let link;
   try{
-    let link;
     if(kind==="USB"){
       if(!("serial" in navigator)){setStatus("This browser can't open the pedal's USB link — use Chrome or Edge on a computer","err");return;}
       link=new SerialLink(await navigator.serial.requestPort({filters:[{usbVendorId:0x2b5a}]}));
@@ -696,7 +706,8 @@ async function connectLink(kind,showAll=false){
     try{rigPaths=await discoverRig(u);log(`Reading ${Object.keys(rigPaths).length} Rig settings from the pedal`);}catch(e){log("Couldn't read Rig settings: "+e.message);}
   }catch(e){
     if(kind==="USB"&&e.name==="NotFoundError")return;
-    if(kind!=="USB"&&/service/i.test(e.message))e=new Error(`${btPicked} doesn't show UA's pedal service (${e.name}: ${e.message})`);
+    if(kind!=="USB"&&/service|characteristic/i.test(e.message))e=new Error(`${btPicked}: ${e.message}`);
+    else if(link?.found)e=new Error(`${e.message} [characteristics: ${link.found}]`);
     setStatus(`Couldn't link to the pedal over ${kind}: ${e.message}`+(kind==="USB"?"":
       " — close UAFX Control on your phone, press the pedal's PAIR button and retry; if it still fails, power the pedal off and on"),"err");
     log(`${kind} link failed: ${e.name}: ${e.message}`);}

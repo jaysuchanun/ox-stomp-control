@@ -74,6 +74,9 @@ modeled on UA's UAFX Control app. Jay is an electrical engineer (embedded / ESP3
   BleLink now mirrors the app's connect steps (MTU max 0 = not ready, priming read of the notify char, 4 retries).
   Then: chooser opened but the pedal wasn't listed even after PAIR → added "Show all Bluetooth devices" (acceptAllDevices,
   shown after a miss); the picked device's name/id is logged so the real advertised name can go into the filter.
+  Then (via Show all): picked "UAFX OX Stomp", service 3bf93be5… found but **no …0201 characteristic** on Jay's pedal
+  from Chrome/macOS. BleLink now lists the service's characteristics (shown in errors) and falls back to the combined
+  …09c5fd (commented out in UA's source) or any write/notify characteristic.
   Can't test headless here: macOS kills any process from Claude Code that touches Bluetooth (SIGABRT, no TCC permission).
   Verified in Chrome on the Mac 2026-10-21: the live panel follows the LEDs, Rig knob and knobs.
   On Jay's pedal `midi_cc_map` shows **Cab has no CC assigned (-1)**, so CC20 does nothing until set in UAFX Control.
