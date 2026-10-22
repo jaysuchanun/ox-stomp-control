@@ -43,8 +43,17 @@ modeled on UA's UAFX Control app. Jay is an electrical engineer (embedded / ESP3
   `/panel/emperor_state/{current_rig_index, current_cab_selection, current_mic1/2_selection,
   current_room_mic_selection, right_footswitch_mode}/value`. `bypassed_delay/_reverb` are stale (stay true with
   reverb on, don't change on FS press) — the page derives Delay/Reverb from the LEDs when right_footswitch_mode = 1
-  ("Delay-Reverb": A = delay, B = reverb; Jay's setting; verified on the pedal 2026-10-21). Other modes show "—". Real FX state probably lives in
-  another service (ports 4720/4793/5600 unexplored).
+  ("Delay-Reverb": A = delay, B = reverb; Jay's setting; verified on the pedal 2026-10-21). Other modes show "—".
+- **Rig settings live (sound engine "emperord", port 4740; 4718 is its other API).** Services found by scanning
+  4700–4799: 4715 paneld, 4718/4740 emperord, 4792 smd, 4794 bled. `/mixers/<id>` has channels SLOT 1/2
+  (Speaker Drive Pedal: `thermal`) and buses AUX 1/2 (H CM Plus: cab, mic, axis, hp = Mic 1/2), AUX 3/4 (Room Pedal
+  L/R: room_mic, room_damp, room_hp, room_balance), MASTER (Cambridge EQ → UA 1176SE → Precision Delay Mod L →
+  Plate 140 OX). Bus level/pan/mute: `<bus>/outputs/main/controls/{gain,pan,mute}`. Each control node has
+  `normalized_value` (0–1) + `string_value` (UAFX Control's text, e.g. "420 ms"); 1176 on/off = effect node's
+  `plugin_power`. `RIG_MAP` in index.html maps all 59 page controls; `discoverRig()` finds buses/effects by name and
+  plugin id. While reading, controls show the pedal's value and text (`liveText`); a full sweep takes ~130 ms and
+  the page reads 12 per poll cycle. OX "Output" is assumed to be MASTER gain (unverified). Delay/reverb `power`
+  here is the real FX state (reverb On with B lit).
   Cab/mic/room indexes use the same tables as the CCs. The page sends GETs only — no SETs (yet).
   Verified in Chrome on the Mac 2026-10-21: the live panel follows the LEDs, Rig knob and knobs.
   On Jay's pedal `midi_cc_map` shows **Cab has no CC assigned (-1)**, so CC20 does nothing until set in UAFX Control.
