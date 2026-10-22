@@ -81,6 +81,7 @@ input[type=range]:disabled{opacity:.45}
     <button id="connect" class="primary">Connect MIDI</button>
     <select id="output" title="MIDI output"><option value="">— no output —</option></select>
     <label class="status">Ch <select id="channel"></select></label>
+    <button id="saveRigBtn" hidden title="Store the pedal's current sound in the Rig it's on — like Save in UAFX Control">Save to Rig</button>
     <button id="serialBtn" title="Two-way link over the pedal's USB port: reads its live state and sets every control, Rig settings included (Chrome/Edge)">USB link</button>
     <button id="sendAll" title="Send every value on screen to the pedal">Send all</button>
     <select id="snapList" title="Saved snapshots"><option value="">Snapshots…</option></select>
@@ -713,20 +714,57 @@ async function pollLive(){
 }
 // USB serial link (Chrome/Edge on a computer)
 async function disconnectLink(){const u=uanet;uanet=null;rigPaths=null;liveText={};await u.close();
-  $("serialBtn").textContent="USB link";$("live").hidden=true;paintAll();log(`${u.link.name} link closed`);}
+  $("serialBtn").textContent="USB link";$("saveRigBtn").hidden=true;$("live").hidden=true;paintAll();log(`${u.link.name} link closed`);}
 async function connectLink(){
   if(uanet){await disconnectLink();return;}
   if(!("serial" in navigator)){setStatus("This browser can't open the pedal's USB link — use Chrome or Edge on a computer","err");return;}
   try{
     const link=new SerialLink(await navigator.serial.requestPort({filters:[{usbVendorId:0x2b5a}]}));
     const u=new UANet(link);await u.open();uanet=u;
-    $("live").hidden=false;$("serialBtn").textContent="Disconnect";
+    $("live").hidden=false;$("serialBtn").textContent="Disconnect";$("saveRigBtn").hidden=false;
     setStatus("Linked over USB — every control, Rig settings included, now changes the pedal live","ok");
     log("Linked to the pedal over USB");pollLive();
     try{rigPaths=await discoverRig(u);log(`Reading ${Object.keys(rigPaths).length} Rig settings from the pedal`);}catch(e){log("Couldn't read Rig settings: "+e.message);}
   }catch(e){if(e.name!=="NotFoundError"){setStatus("Couldn't link to the pedal over USB: "+e.message,"err");log(`USB link failed: ${e.name}: ${e.message}`);}}
 }
 $("serialBtn").onclick=connectLink;
+// ---- Save to Rig: what UAFX Control's preset menu "Save" does on an OX (preset-menu.ts savePreset) ----
+// The active Rig's preset UID is panel state rig_uid_<index+1>; deviced POSTs <presets folder>/save, then the app clears
+// current_preset_modified and POSTs delete_modified. UA never overwrites its factory presets (it saves a copy instead).
+const OX_SESSION="81f8e32ffea347caba3c862ee77d2a7e",FACTORY_RIGS=["366643e370494210be1bcf78fe1ecda9","b8f06fa777f74fe8957024c44171a159",
+  "560ee9d0df5742ac895ef449964f3688","ccd9695092824c3998a9632bfeb21846","c9d5597673b048459123e3c95087c153","2a4c6154369341008f3e59c34d756847",
+  "3222de81de684d7f88708a5cf2ce8669","f406616b854b48af9dc64cb0faee3651","6f0bd5d9da6343c6b7070858461e0a88","6720db8be8a54cb99f1d9bf554a3403a",
+  "6b5712a934874cdfac09c7d6fd4f8743","c22d85e7b1f7471fac3adec2859a2230","4f96193950b949e3ab3192b91d8a9541","902503cc7c764b65a7fe2ea93e03fa56",
+  "89f998c278f847fd926cf5042a67714f","2b5bb75ad51b49cbb4adde0b204c7cee","3704f3e0b29343f4aee705cb0d70f121","0eb767936f7a411dabf91d7243aba36d",
+  "a68dc1d28f3a455ca3ab78c1a47463d9","a8eef346e4f049c599e9892143a3581f","302c8c1f3f3e4025a09869170c20691b","573091af86814f8295d7134c834b0959",
+  "145b0898596b43569dea21d581ca54e1","173091af86814f8295d7134c834b0959","dca9f00d2920470c855cc74aa0792ac8","073091af86814f8295d7134c834b0959"];
+const plain=d=>typeof d==="object"&&d?(d.properties?.value?.value??d.value??""):d;
+let presetFolder=null;
+// The deviced folder holding this pedal's presets (the app gets it from its config) — the one that has this UID
+async function findPresetFolder(uid){
+  if(presetFolder)return presetFolder;
+  const kids=((await uanet.get("/presets/devices",DEVICED_PORT,true))?.children||[]).map(c=>c.path);
+  for(const k of kids){const base=`/presets/devices/${k}`;
+    try{if(plain(await uanet.get(`${base}/presets/${uid}/preset_name`,DEVICED_PORT,true))!=null)return presetFolder=base;}catch{}}
+  throw new Error(`couldn't find the pedal's preset folder (found: ${kids.join(", ")||"nothing"})`);}
+async function post(path,data,port=DEVICED_PORT){
+  const r=await uanet.req({action:3,pathId:await uanet.pathId(path,port),data,params:pbB(10,pbS("_promise_post"))});
+  if(r.error)throw new Error(r.error);return r.data;}
+async function saveRig(){
+  if(!uanet){setStatus("Click USB link first — saving to the pedal needs the link","err");return;}
+  try{
+    const idx=Number(await uanet.get("/panel/emperor_state/current_rig_index/value")),uid=plain(await uanet.get(`/panel/emperor_state/rig_uid_${idx+1}/value`));
+    if(!uid)throw new Error("the pedal didn't say which Rig it's on");
+    if(FACTORY_RIGS.includes(uid)){setStatus(`Rig ${idx+1} is a UA factory Rig — it can't be overwritten. Use Save Copy in UAFX Control`,"err");return;}
+    const base=await findPresetFolder(uid),name=String(plain(await uanet.get(`${base}/presets/${uid}/preset_name`,DEVICED_PORT,true))??"");
+    if(!confirm(`Save the pedal's current sound into Rig ${idx+1} "${name}"?\n\nThis replaces what's stored in that Rig.`))return;
+    await post(`${base}/save`,{preset_uid:uid,session_uid:OX_SESSION,outputs:true});
+    await uanet.set("/panel/emperor_state/current_preset_modified/value",false,UANET_PORT);
+    try{await post(`${base}/delete_modified`,{uid});}catch(e){log("delete_modified: "+e.message);}
+    setStatus(`Saved to Rig ${idx+1} "${name}"`,"ok");log(`Saved the pedal's sound to Rig ${idx+1} "${name}" (${uid})`);
+  }catch(e){setStatus("Couldn't save the Rig: "+e.message,"err");log(`Save to Rig failed: ${e.message}`);}
+}
+$("saveRigBtn").onclick=saveRig;
 if(!("serial" in navigator))$("serialBtn").style.display="none";
 // Live writes, latest value wins per path so a dragged slider doesn't queue up a backlog
 const writing=new Map();

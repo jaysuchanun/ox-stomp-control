@@ -1,5 +1,5 @@
 // OX Stomp Control — offline cache. Bump VERSION when any file in ASSETS changes.
-const VERSION = "ox-stomp-v16";
+const VERSION = "ox-stomp-v17";
 const ASSETS = ["./", "index.html", "manifest.webmanifest",
   "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 

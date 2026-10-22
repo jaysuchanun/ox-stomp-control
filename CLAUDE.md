@@ -92,6 +92,13 @@ modeled on UA's UAFX Control app. Jay is an electrical engineer (embedded / ESP3
   0–250 ms (added, `revpre`), Mix dry…wet, Treble/Bass cut…boost. **Delay time max depends on Mode**: Dual/Crossover/
   Ping Pong 3 s, Chorus 125 ms, Flanger 45 ms (`delayMaxMs`). The app also has per-mic and room EQ + cuts (not on the page).
 
+- **Save to Rig (2026-10-21)** — button shown while linked; same as UAFX Control's preset menu Save (preset-menu.ts):
+  rig = paneld `current_rig_index`, uid = paneld `/panel/emperor_state/rig_uid_<index+1>/value`; deviced POST
+  `<folder>/save` `{preset_uid, session_uid:"81f8e32f…", outputs:true}`, then SET paneld `current_preset_modified` false and
+  POST `<folder>/delete_modified` `{uid}`. `<folder>` = the `/presets/devices/<x>` that has `presets/<uid>/preset_name`
+  (the app reads it from config; the page searches). UA's factory preset UIDs (`FACTORY_RIGS`, from deviced-client.js) are
+  refused, as the app does. Asks for confirmation. Checked against a simulated pedal only — not yet on the real one.
+
 ## OX Stomp MIDI CC map (UA OX Stomp manual, fw 2.0)
 7 Output · 12 FS Left (manual says 1 = press; pedal needs 127, page sends 127 then 0) · 13 FS Right (same) · 19 Bypass (0 bypass, 1 L FS, 2 R FS) · 20 Cab (0–21) ·
 21 Speaker Drive · 22 Mic1 model (0–6) · 23 Mic1 Vol · 24 Mic1 Pan · 25 Mic1 Mute · 26 Mic1 Axis (0 off, 1 on) ·
