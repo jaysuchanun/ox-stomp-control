@@ -663,6 +663,7 @@ async function pollLive(){
 // One link at a time: USB serial or Bluetooth (both Chrome/Edge on a computer)
 async function disconnectLink(){const u=uanet;uanet=null;rigPaths=null;liveText={};await u.close();
   $("serialBtn").textContent="USB link";$("bleBtn").textContent="Bluetooth";$("live").hidden=true;paintAll();log(`${u.link.name} link closed`);}
+let btPicked="";
 async function connectLink(kind,showAll=false){
   if(uanet){const was=uanet.link.name;await disconnectLink();if(was===kind)return;}
   try{
@@ -683,7 +684,7 @@ async function connectLink(kind,showAll=false){
         setStatus(showAll?"No device picked. Pedal still missing? Close UAFX Control on your phone (or turn its Bluetooth off), power-cycle the pedal, press PAIR":
           "No pedal picked. If it wasn't listed: press PAIR, then try “Show all Bluetooth devices”","err");return;}
       $("bleAllBtn").hidden=true;
-      log(`Bluetooth device picked: "${dev.name??""}" id ${dev.id}`);
+      btPicked=`"${dev.name??"(no name)"}"`;log(`Bluetooth device picked: ${btPicked} id ${dev.id}`);
       setStatus(`Connecting to ${dev.name||"pedal"} over Bluetooth…`);
       dev.addEventListener("gattserverdisconnected",()=>{if(uanet?.link.device===dev){log("Bluetooth disconnected");disconnectLink();}});
       link=new BleLink(dev);
@@ -695,7 +696,7 @@ async function connectLink(kind,showAll=false){
     try{rigPaths=await discoverRig(u);log(`Reading ${Object.keys(rigPaths).length} Rig settings from the pedal`);}catch(e){log("Couldn't read Rig settings: "+e.message);}
   }catch(e){
     if(kind==="USB"&&e.name==="NotFoundError")return;
-    if(kind!=="USB"&&/service/i.test(e.message))e=new Error("that device doesn't have UA's pedal service — pick the pedal (try “Show all Bluetooth devices”)");
+    if(kind!=="USB"&&/service/i.test(e.message))e=new Error(`${btPicked} doesn't show UA's pedal service (${e.name}: ${e.message})`);
     setStatus(`Couldn't link to the pedal over ${kind}: ${e.message}`+(kind==="USB"?"":
       " — close UAFX Control on your phone, press the pedal's PAIR button and retry; if it still fails, power the pedal off and on"),"err");
     log(`${kind} link failed: ${e.name}: ${e.message}`);}
