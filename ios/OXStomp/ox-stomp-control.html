@@ -75,7 +75,8 @@ input[type=range]:disabled{opacity:.45}
     <button id="connect" class="primary">Connect MIDI</button>
     <select id="output" title="MIDI output"><option value="">— no output —</option></select>
     <label class="status">Ch <select id="channel"></select></label>
-    <button id="serialBtn" title="Read the pedal's live state over its USB serial port (Chrome/Edge)">Read pedal</button>
+    <button id="serialBtn" title="Two-way link over the pedal's USB port: reads its live state and sets every control, Rig settings included (Chrome/Edge)">USB link</button>
+    <button id="bleBtn" title="Same two-way link, wireless, over the pedal's Bluetooth — no cable (Chrome/Edge)">Bluetooth</button>
     <button id="sendAll" title="Send every value on screen to the pedal">Send all</button>
     <select id="snapList" title="Saved snapshots"><option value="">Snapshots…</option></select>
     <button id="snapLoad">Load</button>
@@ -91,8 +92,8 @@ input[type=range]:disabled{opacity:.45}
 <script>
 // ---- Parameter map: UA OX Stomp manual, "OX Stomp MIDI CCs" (firmware 2.0+) ----
 const CABS = ["1x10 Black Cha","1x12 Black GB30","1x12 Black D-UX","1x12 JBG125","1x12 Blu 15","1x12 GB25","1x12 Blue J","2x10 V-UX","2x12 Ace Top","2x12 Alnico 50","2x12 Black 8h","2x12 D65","2x12 Two Verb","2x12 JBF120","4x10 BMan","4x12 GB30",
-  // 16–21: UA's CC table is truncated after 15; these follow the manual's cabinet list order — verify on the pedal
-  "4x12 UK Vee 30 (16?)","4x12 CA Vee 30 (17?)","4x12 Super 80 (18?)","4x12 GB25 Punch (19?)","4x12 GB25 Thick (20?)","4x12 White 75 (21?)"];
+  // 16–21: UA's CC table is truncated after 15; this order is confirmed by UAFX Control 2.3.0's own OX cab list
+  "4x12 UK Vee 30","4x12 CA Vee 30","4x12 Super 80","4x12 GB25 Punch","4x12 GB25 Thick","4x12 White 75"];
 const MICS = ["Dynamic 421","Dynamic 57","Condenser 414","Ribbon 160","Ribbon 121","Condenser 67","Direct Box"];
 const ROOMS = ["Condenser Stereo","Ribbon Stereo","Condenser Mono","Condenser 67 Mono","Ribbon 84 Mono","Ribbon 121 Mono"];
 
@@ -147,7 +148,7 @@ const SECTIONS = [
     {id:"cmprel",label:"Release",type:"range",def:64,unit:"rel1176",nomidi:true},
     {id:"cmpratio",label:"Ratio",type:"select",options:["4:1","8:1","12:1","20:1","All"],def:0,nomidi:true},
   ]},
-  {title:"Delay", note:"Full delay layout from UAFX Control. Controls tagged CC change the pedal live; controls tagged Rig have no MIDI CC, so set them in UAFX Control and save the Rig — values here are kept with your snapshots as a record.", params:[
+  {title:"Delay", note:"Full delay layout from UAFX Control. Controls tagged CC change the pedal over MIDI; controls tagged Rig have no MIDI CC — they change the pedal live once it's linked (USB link or Bluetooth). Over MIDI only, they're kept with your snapshots as a record.", params:[
     {id:"dly",cc:40,label:"Enable",type:"toggle",def:1},
     {id:"dmode",label:"Mode",type:"select",options:["Dual","Crossover","Ping Pong","Chorus","Flanger"],def:0,nomidi:true},
     {id:"dlytime",cc:41,label:"Time A",type:"range",def:22,unit:"delayTime"},
@@ -262,7 +263,7 @@ function applyLinks(){
 }
 function build(){
   const main=$("main");
-  // Live pedal state, read over USB serial (see "Live state" below)
+  // Live pedal state, read over the USB or Bluetooth link (see "Two-way link" below)
   const lv=document.createElement("section");lv.id="live";lv.hidden=true;
   lv.innerHTML=`<h2>Pedal — live <span id="liveStatus" class="status"></span></h2>
     <div class="leds"><span class="led"><i id="ledA"></i>A</span><span class="led"><i id="ledB"></i>B</span></div>
@@ -275,14 +276,14 @@ function build(){
   const fs=document.createElement("section");
   fs.innerHTML=`<h2>Footswitches & Rigs</h2>
     <div class="seg"><button id="fsl">Press A <span class="cc">CC12</span></button><button id="fsr">Press B <span class="cc">CC13</span></button></div>
-    <p class="note">Same as stepping on footswitch A or B: each press toggles it. Click <b>Read pedal</b> to see the
+    <p class="note">Same as stepping on footswitch A or B: each press toggles it. Link the pedal (<b>USB link</b> or <b>Bluetooth</b>) to see the
       A/B LEDs live (at power-up: A off, B on).</p>
     <div class="seg" id="byp" style="margin-top:10px">
       <button data-v="0">Bypass</button><button data-v="1">A on</button><button data-v="2">B on</button>
     </div><p class="note">Footswitch state <span class="cc">CC19</span> — unreliable on the pedal (2 = B on works;
       0 and 1 don't act as documented). Not sent by Send all.</p>
     <div class="row" style="margin-top:12px"><label>Program</label><input id="pc" type="number" min="0" max="127" placeholder="0–127"><button id="pcSend">Send</button></div>
-    <p class="note">Program Change recalls Rigs you assigned to PC slots in UAFX Control — this is how Rig-tagged settings (Master EQ, compressor, delay mode…) reach the pedal.</p>`;
+    <p class="note">Program Change recalls Rigs you assigned to PC slots in UAFX Control — over MIDI only, this is how Rig-tagged settings (Master EQ, compressor, delay mode…) reach the pedal. Linked over USB or Bluetooth, they're set live.</p>`;
   main.appendChild(fs);
   fs.querySelectorAll("#byp button").forEach(b=>b.onclick=()=>{state.bypass=Number(b.dataset.v);sendCC(19,state.bypass,"Bypass");paintBypass();});
   // Verified on the pedal: a press needs 127 (UA's table says 1, which the pedal ignores), then release with 0
@@ -300,7 +301,7 @@ function build(){
         const b=document.createElement("button");
         b.innerHTML=`${p.label}${tag(p)}`;
         if(p.nomidi)b.classList.add("nomidi");
-        b.onclick=()=>{state[p.id]=state[p.id]?0:1;if(!p.nomidi)sendCC(p.cc,state[p.id],`${s.title} ${p.label}`);applyLinks();paint(p);};
+        b.onclick=()=>{state[p.id]=state[p.id]?0:1;sendParam(p,`${s.title} ${p.label}`);applyLinks();paint(p);};
         ui[p.id]=b;tg.appendChild(b);continue;
       }
       const row=document.createElement("div");row.className="row";
@@ -311,16 +312,16 @@ function build(){
       if(p.type==="select"){
         ctl=document.createElement("select");
         p.options.forEach((o,i)=>ctl.add(new Option(o,i)));
-        ctl.onchange=()=>{state[p.id]=Number(ctl.value);if(!p.nomidi)sendCC(p.cc,state[p.id],`${s.title} ${p.label}: ${p.options[state[p.id]]}`);paint(p);};
+        ctl.onchange=()=>{state[p.id]=Number(ctl.value);sendParam(p,`${s.title} ${p.label}: ${p.options[state[p.id]]}`);paint(p);};
       }else{
         ctl=document.createElement("input");ctl.type="range";ctl.min=0;ctl.max=127;
         let last=null;
         ctl.oninput=()=>{
           if(p.linkKey&&state[p.linkKey]){paint(p);return;} // follower locked while linked
           state[p.id]=Number(ctl.value);val.textContent=fmt(p,state[p.id]);
-          if(!p.nomidi&&state[p.id]!==last){last=state[p.id];sendCC(p.cc,state[p.id],`${s.title} ${p.label}`);}
+          if(state[p.id]!==last){last=state[p.id];sendParam(p,`${s.title} ${p.label}`);}
           applyLinks();};
-        ctl.ondblclick=()=>{state[p.id]=p.def;paint(p);if(!p.nomidi)sendCC(p.cc,p.def,`${s.title} ${p.label} (reset)`);applyLinks();};
+        ctl.ondblclick=()=>{state[p.id]=p.def;paint(p);sendParam(p,`${s.title} ${p.label} (reset)`);applyLinks();};
       }
       ui[p.id]={ctl,val};
       row.append(lab,ctl,val);sec.appendChild(row);
@@ -330,7 +331,7 @@ function build(){
   }
   buildRigLib(main);
   const lg=document.createElement("section");lg.innerHTML=`<h2>MIDI log</h2><div id="log"></div>
-    <p class="note">MIDI is one-way, so most controls show what this page last sent. “Read pedal” (Chrome/Edge) reads the pedal's live state — LEDs, Rig, cab, mics, knobs — over USB. Use “Send all” to push this screen to the pedal. Double-click a slider to reset it. Values marked ≈ are estimates: UA publishes each range’s end points but not the curve between them.</p>`;
+    <p class="note">MIDI is one-way, so most controls show what this page last sent. “USB link” or “Bluetooth” (Chrome/Edge) opens a two-way link instead: the page shows the pedal's live state and every control — Rig settings included — changes the pedal directly. Use “Send all” to push this screen to the pedal. Double-click a slider to reset it. Values marked ≈ are estimates: UA publishes each range’s end points but not the curve between them.</p>`;
   lg.style.gridColumn="1/-1";main.appendChild(lg);
 }
 // ---- Rig Library: a saved Rig = every value on this page + its Program Change slot ----
@@ -354,7 +355,7 @@ let editing=-1;
 function buildRigLib(main){
   const sec=document.createElement("section");sec.style.gridColumn="1/-1";
   sec.innerHTML=`<h2>Rig Library</h2>
-    <p class="note">Set up a sound on this page, match it in UAFX Control (Rig-tagged controls can only be applied there), save it on the pedal and give it a MIDI Program Change slot. Then save it here: <b>Recall</b> sends that Program Change and loads the page back to these values.</p>
+    <p class="note">Set up a sound on this page, send it to the pedal (linked over USB or Bluetooth, every control goes live; over MIDI, Rig-tagged ones need UAFX Control), save it on the pedal and give it a MIDI Program Change slot. Then save it here: <b>Recall</b> sends that Program Change and loads the page back to these values.</p>
     <div class="eqgrid" style="margin-top:10px">
       <label>Rig name<input type="text" id="rf_name" placeholder="Gravity Jay"></label>
       <label>Program Change #<input type="number" id="rf_pc" min="0" max="127" placeholder="0–127"></label>
@@ -404,6 +405,8 @@ function paintAll(){PARAMS.forEach(paint);paintBypass();$("pc").value=state.pc??
 async function sendAll(){
   if(state.pc!=null)sendPC(state.pc);
   await new Promise(r=>setTimeout(r,120));
+  // Linked: every control is written live, Rig settings too; otherwise only the CC-mapped ones go out as MIDI
+  if(uanet){for(const p of PARAMS)for(const[path,v,port]of liveWrites(p,state[p.id],state))await writePath(path,v,port);log("Sent all settings over the link");return;}
   for(const p of PARAMS.filter(q=>!q.nomidi)){sendCC(p.cc,state[p.id],p.label);await new Promise(r=>setTimeout(r,8));}
 }
 $("sendAll").onclick=sendAll;
@@ -420,10 +423,9 @@ $("exportBtn").onclick=()=>{const native=window.webkit?.messageHandlers?.midi;if
 $("importBtn").onclick=()=>$("importFile").click();
 $("importFile").onchange=async e=>{try{const o=JSON.parse(await e.target.files[0].text());writeSnaps({...readSnaps(),...o});refreshSnaps();log("Imported snapshots");}catch{log("Import failed — not a valid snapshot file");}};
 
-// ---- Live state over USB serial (Web Serial) ----
-// The pedal's USB port also carries a CDC serial link that UA's own software uses: "UANet" — protobuf
-// packets with JSON values, COBS-framed with a CRC7 byte per 253-byte block. MIDI is send-only, but here
-// values can be read. This page only sends GET requests (read-only). Port 4715 is the pedal's panel service.
+// ---- Two-way link: USB serial (Web Serial) or Bluetooth (Web Bluetooth) ----
+// UA's own software talks "UANet" to the pedal — protobuf packets with JSON values. MIDI is send-only, but here
+// values can be read (GET) and set (SET). Port 4715 is the pedal's panel service.
 const UANET_PORT=4715, CRC7=[0,9,18,27,36,45,54,63,72,65,90,83,108,101,126,119,25,16,11,2,61,52,47,38,81,88,67,74,117,124,103,110,50,59,32,41,22,31,4,13,122,115,104,97,94,87,76,69,43,34,57,48,15,6,29,20,99,106,113,120,71,78,85,92,100,109,118,127,64,73,82,91,44,37,62,55,8,1,26,19,125,116,111,102,89,80,75,66,53,60,39,46,17,24,3,10,86,95,68,77,114,123,96,105,30,23,12,5,58,51,40,33,79,70,93,84,107,98,121,112,7,14,21,28,35,42,49,56,65,72,83,90,101,108,119,126,9,0,27,18,45,36,63,54,88,81,74,67,124,117,110,103,16,25,2,11,52,61,38,47,115,122,97,104,87,94,69,76,59,50,41,32,31,22,13,4,106,99,120,113,78,71,92,85,34,43,48,57,6,15,20,29,37,44,55,62,1,8,19,26,109,100,127,118,73,64,91,82,60,53,46,39,24,17,10,3,116,125,102,111,80,89,66,75,23,30,5,12,51,58,33,40,95,86,77,68,123,114,105,96,14,7,28,21,42,35,56,49,70,79,84,93,98,107,112,121];
 function crc7(b){let r=0;for(const o of b)r=CRC7[((r<<1)^o)&0xff];return r;}
 function cobsBlock(e){const r=[];let o=0;e.forEach((n,t)=>{let c=null;if(n===0)c=e.slice(o,t);else if(t===e.length-1)c=e.slice(o);if(c){r.push(1+c.length,...c);o=t+1;}});return r;}
@@ -435,36 +437,117 @@ const pbV=(no,v)=>[...vint(no<<3),...vint(v)], pbB=(no,b)=>[...vint(no<<3|2),...
 function pbParse(b){const o={};let i=0;const rv=()=>{let v=0,m=1,x;do{x=b[i++];v+=(x&0x7f)*m;m*=128;}while(x&0x80);return v;};
   while(i<b.length){const k=rv(),no=Math.floor(k/8),wt=k&7;let v;if(wt===0)v=rv();else if(wt===2){const L=rv();v=b.subarray(i,i+L);i+=L;}else throw new Error("wiretype "+wt);(o[no]??=[]).push(v);}return o;}
 async function pbStr(b){const m=pbParse(b);if(m[1])return dec.decode(m[1][0]);if(m[2]){const d=pbParse(m[2][0]);const ds=new Blob([d[2][0]]).stream().pipeThrough(new DecompressionStream("deflate"));return await new Response(ds).text();}return "";}
-class UANet{
-  constructor(port){this.port=port;this.uid="router:"+crypto.randomUUID();this.n=0;this.buf=[];this.wait=new Map();this.ids={};this.onHandshake=null;}
-  async open(){await this.port.open({baudRate:115200});this.writer=this.port.writable.getWriter();this.loop=this.readLoop();
-    await new Promise((res,rej)=>{this.onHandshake=res;this.write(cobsEncode([]));setTimeout(()=>rej(new Error("no handshake")),3000);});
-    await this.req({action:3,path:"/",data:{deflate:false},gw:4});}
-  write(b){return this.writer.write(b);}
+// Two links carry the same UANet packets (found in UAFX Control 2.3.0 for Android — its @uaudio/transport-ble and
+// emperor-capacitor modules): USB serial = COBS frames with CRC7, handshake = an empty frame the pedal echoes;
+// Bluetooth LE = UA's GATT "serial" service, each write/notification one block with a 3-byte header
+// (24-bit little-endian block number from 1, top bit of byte 3 = more blocks follow), no COBS/CRC.
+class SerialLink{
+  constructor(port){this.port=port;this.buf=[];this.name="USB";this.repeat=0;}
+  async open(onPacket){this.onPacket=onPacket;await this.port.open({baudRate:115200});this.writer=this.port.writable.getWriter();this.loop=this.readLoop();
+    await new Promise((res,rej)=>{this.onHandshake=res;this.writer.write(cobsEncode([]));setTimeout(()=>rej(new Error("no handshake")),3000);});}
+  send(b){return this.writer.write(cobsEncode(b));}
   async readLoop(){const r=this.port.readable.getReader();this.reader=r;
     try{for(;;){const{value,done}=await r.read();if(done)break;for(const x of value){this.buf.push(x);if(x===0&&this.buf.length>1){const fr=Uint8Array.from(this.buf);this.buf=[0];this.frame(fr);}}}}
     catch(e){}finally{r.releaseLock();}}
-  async frame(fr){if(fr.length===4&&fr[1]===2&&fr[2]===1){this.onHandshake?.();this.onHandshake=null;return;}
-    if(fr.length<4)return;let m;try{m=pbParse(cobsDecode(fr));}catch{return;}
-    if(!m[3])return;const sp=pbParse(m[3][0]);let mid=null;if(sp[2]){const pm=pbParse(sp[2][0]);if(pm[11])mid=await pbStr(pm[11][0]);}
-    const w=this.wait.get(mid);if(!w)return;this.wait.delete(mid);
-    let data=null;if(sp[3]){const t=await pbStr(sp[3][0]);try{data=JSON.parse(t);}catch{data=t;}}
-    w(sp[5]?{error:await pbStr(sp[5][0])}:{data});}
-  req({action=0,path="/",pathId=0,data,gw=0,params=[]}){const mid=`${this.uid}:${++this.n}`;
-    const pth=pathId?pbV(2,pathId):pbB(1,pbB(2,pbS(path)));
-    const cp=[...pbB(1,pth),...pbB(2,[...params,...pbB(11,pbS(mid))]),...(action?pbV(3,action):[]),...(data!==undefined?pbB(4,pbS(JSON.stringify(data))):[]),...(gw?pbV(5,gw):[])];
-    const p=new Promise((res,rej)=>{this.wait.set(mid,res);setTimeout(()=>{if(this.wait.delete(mid))rej(new Error("timeout "+path));},1500);});
-    this.write(cobsEncode([...pbB(1,[...enc.encode(this.uid)]),...pbB(2,cp)]));return p;}
-  async get(path,port=UANET_PORT,slim=false){const key=port+path;
-    if(!this.ids[key]){const r=await this.req({action:3,path:"/",data:{path,port},gw:1});this.ids[key]=r.data.pathId;}
-    return (await this.req({action:1,pathId:this.ids[key],params:slim?[...pbV(3,1),...pbV(4,1)]:[]})).data;}
-  // A node's properties as {name: value} (no option tables / commands, keeps replies small)
-  async node(path,port=MIXER_PORT){const d=await this.get(path,port,true)||{};
-    return{props:Object.fromEntries(Object.entries(d.properties||{}).map(([k,v])=>[k,v?.value])),kids:(d.children||[]).map(c=>c.path)};}
+  frame(fr){if(fr.length===4&&fr[1]===2&&fr[2]===1){this.onHandshake?.();this.onHandshake=null;return;}
+    if(fr.length<4)return;let b;try{b=cobsDecode(fr);}catch{return;}this.onPacket(b);}
   // Release in order — cancel the reader and wait for its loop to unlock before closing, or close() fails and
   // the port stays held by this tab
   async close(){try{await this.reader?.cancel();await this.loop;this.writer?.releaseLock();await this.port.close();}catch(e){console.warn("serial close:",e);}}
 }
+const BLE_SERVICE="3bf93be5-20d2-47de-96d8-5d6fbb659220",BLE_TO_PEDAL="ef4ede65-1906-4c39-8b88-ca5356090201",
+  BLE_FROM_PEDAL="ef4ede65-1906-4c39-8b88-ca5356090101",BLE_MTU="ef4ede65-1906-4c39-8b88-ca53560a0001",UA_BT_COMPANY=0x09c2;
+class BleLink{
+  // UA's app re-sends its first request every 200 ms: writes right after connecting can be lost
+  constructor(device){this.device=device;this.blocks=[];this.name="Bluetooth";this.repeat=10;this.q=Promise.resolve();this.block=182;}
+  async open(onPacket){this.onPacket=onPacket;
+    const svc=await(await this.device.gatt.connect()).getPrimaryService(BLE_SERVICE);
+    // MTU characteristic: u16 LE max, u16 LE usable block size (the pedal's view of the negotiated ATT MTU)
+    try{const v=new Uint8Array((await(await svc.getCharacteristic(BLE_MTU)).readValue()).buffer);const usable=v[2]|v[3]<<8;if(usable>=23)this.block=Math.min(usable,509);}catch{}
+    this.tx=await svc.getCharacteristic(BLE_TO_PEDAL);const rx=await svc.getCharacteristic(BLE_FROM_PEDAL);
+    rx.addEventListener("characteristicvaluechanged",e=>this.onBlock(new Uint8Array(e.target.value.buffer)));
+    await rx.startNotifications();}
+  onBlock(v){const n=v[0]|v[1]<<8|(v[2]&0x7f)<<16,more=v[2]&0x80;
+    if(n!==this.blocks.length+1){this.blocks=[];if(n!==1)return;}
+    this.blocks.push(v.slice(3));if(more)return;
+    const b=new Uint8Array(this.blocks.reduce((t,x)=>t+x.length,0));let o=0;for(const x of this.blocks){b.set(x,o);o+=x.length;}
+    this.blocks=[];this.onPacket(b);}
+  send(b){const room=this.block-3;
+    for(let o=0,k=1;o<b.length;o+=room,k++){const more=o+room<b.length?0x80:0;
+      const blk=Uint8Array.from([k&255,k>>8&255,(k>>16&0x7f)|more,...b.slice(o,o+room)]);
+      this.q=this.q.then(()=>this.tx.writeValueWithResponse(blk)).catch(e=>console.warn("ble write:",e));}
+    return this.q;}
+  async close(){try{this.device.gatt.disconnect();}catch{}}
+}
+class UANet{
+  constructor(link){this.link=link;this.uid="router:"+crypto.randomUUID();this.n=0;this.wait=new Map();this.ids={};}
+  async open(){await this.link.open(b=>this.packet(b));
+    await this.req({action:3,path:"/",data:{deflate:false},gw:4,repeat:this.link.repeat});}
+  async packet(b){let m;try{m=pbParse(b);}catch{return;}
+    if(!m[3])return;const sp=pbParse(m[3][0]);let mid=null;if(sp[2]){const pm=pbParse(sp[2][0]);if(pm[11])mid=await pbStr(pm[11][0]);}
+    const w=this.wait.get(mid);if(!w)return;this.wait.delete(mid);
+    let data=null;if(sp[3]){const t=await pbStr(sp[3][0]);try{data=JSON.parse(t);}catch{data=t;}}
+    w(sp[5]?{error:await pbStr(sp[5][0])}:{data});}
+  req({action=0,path="/",pathId=0,data,gw=0,params=[],repeat=0}){const mid=`${this.uid}:${++this.n}`;
+    const pth=pathId?pbV(2,pathId):pbB(1,pbB(2,pbS(path)));
+    const cp=[...pbB(1,pth),...pbB(2,[...params,...pbB(11,pbS(mid))]),...(action?pbV(3,action):[]),...(data!==undefined?pbB(4,pbS(JSON.stringify(data))):[]),...(gw?pbV(5,gw):[])];
+    const pkt=[...pbB(1,[...enc.encode(this.uid)]),...pbB(2,cp)];
+    const p=new Promise((res,rej)=>{this.wait.set(mid,res);setTimeout(()=>{if(this.wait.delete(mid))rej(new Error("timeout "+path));},1500+repeat*200);});
+    this.link.send(pkt);
+    for(let i=1;i<repeat;i++)setTimeout(()=>{if(this.wait.has(mid))this.link.send(pkt);},i*200);
+    return p;}
+  async pathId(path,port){const key=port+path;
+    if(!this.ids[key]){const r=await this.req({action:3,path:"/",data:{path,port},gw:1});this.ids[key]=r.data.pathId;}
+    return this.ids[key];}
+  async get(path,port=UANET_PORT,slim=false){
+    return (await this.req({action:1,pathId:await this.pathId(path,port),params:slim?[...pbV(3,1),...pbV(4,1)]:[]})).data;}
+  // Same as UAFX Control's sendSet: the path gets a trailing "/" and the value goes as JSON
+  async set(path,value,port){
+    const r=await this.req({action:2,pathId:await this.pathId(path+"/",port),data:value,params:pbB(10,pbS("set"))});
+    if(r.error)throw new Error(r.error);return r.data;}
+  // A node's properties as {name: value} (no option tables / commands, keeps replies small)
+  async node(path,port=MIXER_PORT){const d=await this.get(path,port,true)||{};
+    return{props:Object.fromEntries(Object.entries(d.properties||{}).map(([k,v])=>[k,v?.value])),kids:(d.children||[]).map(c=>c.path)};}
+  close(){return this.link.close();}
+}
+// ---- Live control: the paths UAFX Control writes (ox-editor.ts in the 2.3.0 app) ----
+// Sound settings go to service "deviced" (port 4718) as normalized 0–1 values; cab / mic / room model go to the
+// panel state (port 4715) as indexes, which also works for Cab where this pedal has no CC assigned.
+// Bus UIDs are fixed for the OX (the app hard-codes them); Room Mic has a left and a right bus, both are written.
+const DEVICED_PORT=4718, OXDEV="/devices/81f8e32ffea347caba3c862ee77d2a7e/buses/";
+const BUS={master:"a9aed57a911d41208d3b24b1ff5cfd78",mic1:"e352a52e7f91487e9867c15b0cab32bf",mic2:"a51633695584466c9c4d97869feab064",
+  room:["56d54cfa2bb64bd49917cca75ba59b0d","092624c00bf94c0abcbce6770f14125f"]};
+const EQ="effects/effect_0/controls/",CMP="effects/effect_1/controls/",DLY="effects/effect_2/controls/",REV="effects/effect_3/controls/",
+  MIC="effects/effect_0/controls/",OUT="outputs/main/controls/";
+const WRITE_MAP={ // page id: [bus, control] | {panel: emperor_state property}
+  output:["master",OUT+"gain"],
+  cab:{panel:"current_cab_selection"},m1:{panel:"current_mic1_selection"},m2:{panel:"current_mic2_selection"},room:{panel:"current_room_mic_selection"},
+  m1vol:["mic1",OUT+"gain"],m1pan:["mic1",OUT+"pan"],m1mute:["mic1",OUT+"mute"],m1axis:["mic1",MIC+"axis"],m1lc:["mic1",MIC+"hp"],
+  m2vol:["mic2",OUT+"gain"],m2pan:["mic2",OUT+"pan"],m2mute:["mic2",OUT+"mute"],m2axis:["mic2",MIC+"axis"],m2lc:["mic2",MIC+"hp"],
+  roomlvl:["room",OUT+"gain"],roompan:["room",MIC+"room_balance"],roommute:["room",OUT+"mute"],roomdamp:["room",MIC+"room_damp"],roomlc:["room",MIC+"room_hp"],
+  eqon:["master",EQ+"master_enable"],eqhigh:["master",EQ+"hf_gain"],eqmid:["master",EQ+"mf_gain"],eqlomid:["master",EQ+"lmf_gain"],eqlow:["master",EQ+"lf_gain"],
+  eqhion:["master",EQ+"hf_enable"],eqmidon:["master",EQ+"mf_enable"],eqlomidon:["master",EQ+"lmf_enable"],eqlowon:["master",EQ+"lf_enable"],
+  eqhicut:["master",EQ+"hc_freq",{enable:EQ+"hc_enable",offAt:127}],eqlocut:["master",EQ+"lc_freq",{enable:EQ+"lc_enable",offAt:0}],
+  // The 1176 is switched by its meter control: OFF (0) = bypassed, GR (3 of 0–3) = on
+  cmpon:["master",CMP+"meter"],cmpin:["master",CMP+"input"],cmpout:["master",CMP+"output"],cmpatk:["master",CMP+"attack"],
+  cmprel:["master",CMP+"release"],cmpratio:["master",CMP+"ratio"],
+  dly:["master",DLY+"power"],dmode:["master",DLY+"mode"],dlytime:["master",DLY+"delay_a",{alsoWhen:["dlink",DLY+"delay_b"]}],
+  dlytimeb:["master",DLY+"delay_b"],dlink:["master",DLY+"link"],dpana:["master",DLY+"pan_a"],dpanb:["master",DLY+"pan_b"],
+  dlinkpan:["master",DLY+"pan_link"],dlyfb:["master",DLY+"recirc"],dlymix:["master",DLY+"mix"],dlfo:["master",DLY+"lfo"],
+  dmodrate:["master",DLY+"rate"],dmoddepth:["master",DLY+"depth"],dhicut:["master",DLY+"lo_pass"],dlocut:["master",DLY+"hi_pass"],
+  rev:["master",REV+"power"],revtime:["master",REV+"reverb_time"],revbal:["master",REV+"balance"],revmix:["master",REV+"mix"],
+  revtreb:["master",REV+"treble"],revbass:["master",REV+"bass"],
+};
+// [path, value, port] writes for page control p at page value v (0–127, an option index, or 0/1)
+function liveWrites(p,v,st){const m=WRITE_MAP[p.id];if(!m)return[];
+  if(m.panel)return[[`/panel/emperor_state/${m.panel}/value`,v,UANET_PORT]];
+  const[bus,ctl,o={}]=m,buses=[].concat(BUS[bus]).map(b=>OXDEV+b+"/");
+  const norm=p.type==="toggle"?(v?1:0):p.type==="select"?v/Math.max(1,p.options.length-1):v/127;
+  const w=[];for(const b of buses){
+    if(o.enable){const on=v!==o.offAt;w.push([b+o.enable+"/normalized_value/value",on?1:0,DEVICED_PORT]);if(!on)continue;}
+    w.push([b+ctl+"/normalized_value/value",norm,DEVICED_PORT]);
+    if(o.alsoWhen&&st[o.alsoWhen[0]])w.push([b+o.alsoWhen[1]+"/normalized_value/value",norm,DEVICED_PORT]);}
+  return w;}
 const LIVE=[ // [key, path, label, format]
   ["ledA","/panel/control/fs_led_left/state/value"],["ledB","/panel/control/fs_led_right/state/value"],
   ["rig","/panel/emperor_state/current_rig_index/value","Rig",v=>v+1],
@@ -503,7 +586,7 @@ const RIG_MAP={ // page id: [strip, plugin|"out"|"fx", control, opts]
   eqhion:["MASTER","uaudio_cambridge","hf_enable"], eqmidon:["MASTER","uaudio_cambridge","mf_enable"],
   eqlomidon:["MASTER","uaudio_cambridge","lmf_enable"], eqlowon:["MASTER","uaudio_cambridge","lf_enable"],
   eqhicut:["MASTER","uaudio_cambridge","hc_freq",{enable:"hc_enable",offAt:127}], eqlocut:["MASTER","uaudio_cambridge","lc_freq",{enable:"lc_enable",offAt:0}],
-  cmpon:["MASTER","uaudio_ua_1176se_legacy","plugin_power",{power:1}], cmpin:["MASTER","uaudio_ua_1176se_legacy","input"],
+  cmpon:["MASTER","uaudio_ua_1176se_legacy","meter"], cmpin:["MASTER","uaudio_ua_1176se_legacy","input"],
   cmpout:["MASTER","uaudio_ua_1176se_legacy","output"], cmpatk:["MASTER","uaudio_ua_1176se_legacy","attack"],
   cmprel:["MASTER","uaudio_ua_1176se_legacy","release"], cmpratio:["MASTER","uaudio_ua_1176se_legacy","ratio"],
   dly:["MASTER","uaudio_precision_delay_mod_l","power"], dmode:["MASTER","uaudio_precision_delay_mod_l","mode"],
@@ -530,15 +613,14 @@ async function discoverRig(u){
   const out={};
   for(const[id,[st,plug,ctl,o={}]]of Object.entries(RIG_MAP)){const S=strips[st];if(!S)continue;
     const base=plug==="out"?`${S.path}/outputs/main/controls`:S.fx[plug]&&`${S.fx[plug]}/controls`;if(!base)continue;
-    out[id]={path:o.power?`${S.fx[plug]}/plugin_power/value`:`${base}/${ctl}`,en:o.enable&&`${base}/${o.enable}`,o};}
+    out[id]={path:`${base}/${ctl}`,en:o.enable&&`${base}/${o.enable}`,o};}
   return out;
 }
 async function readRigParam(u,id){
   const P=PARAMS.find(q=>q.id===id),r=rigPaths[id];if(!P||!r)return;
   let norm,text;
-  if(r.o.power){norm=await u.get(r.path,MIXER_PORT)?1:0;}
-  else{const{props}=await u.node(r.path);norm=props.normalized_value;text=String(props.string_value??"").trim();
-    if(r.en&&!((await u.node(r.en)).props.normalized_value>=.5)){norm=r.o.offAt/127;text="off";}}
+  const{props}=await u.node(r.path);norm=props.normalized_value;text=String(props.string_value??"").trim();
+  if(r.en&&!((await u.node(r.en)).props.normalized_value>=.5)){norm=r.o.offAt/127;text="off";}
   if(norm==null)return;
   const v=P.type==="toggle"?(norm>=.5?1:0):P.type==="select"?Math.round(norm*(P.options.length-1)):Math.round(norm*127);
   const u_=ui[id];if(u_?.ctl&&document.activeElement===u_.ctl)return; // don't fight a control being dragged
@@ -566,20 +648,49 @@ async function pollLive(){
     catch(e){if(!uanet)break;$("liveStatus").textContent="· "+e.message;}
     await new Promise(r=>setTimeout(r,150));}
 }
-async function connectSerial(){
-  if(uanet){const u=uanet;uanet=null;rigPaths=null;liveText={};await u.close();$("serialBtn").textContent="Read pedal";$("live").hidden=true;paintAll();return;}
-  if(!("serial" in navigator)){setStatus("This browser can't read the pedal — use Chrome or Edge on a computer","err");return;}
+// One link at a time: USB serial or Bluetooth (both Chrome/Edge on a computer)
+async function disconnectLink(){const u=uanet;uanet=null;rigPaths=null;liveText={};await u.close();
+  $("serialBtn").textContent="USB link";$("bleBtn").textContent="Bluetooth";$("live").hidden=true;paintAll();log(`${u.link.name} link closed`);}
+async function connectLink(kind){
+  if(uanet){const was=uanet.link.name;await disconnectLink();if(was===kind)return;}
   try{
-    const port=await navigator.serial.requestPort({filters:[{usbVendorId:0x2b5a}]});
-    const u=new UANet(port);await u.open();uanet=u;
-    $("live").hidden=false;$("serialBtn").textContent="Stop reading";log("Reading pedal state over USB serial");pollLive();
-    for(let i=0;i<3&&uanet===u&&!rigPaths;i++){ // a reply occasionally goes missing during discovery — retry
-      try{rigPaths=await discoverRig(u);log(`Reading ${Object.keys(rigPaths).length} Rig settings from the pedal`);}
-      catch(e){if(i===2)log("Couldn't read Rig settings: "+e.message);}}
-  }catch(e){if(e.name!=="NotFoundError")setStatus("Couldn't read the pedal: "+e.message,"err");}
+    let link;
+    if(kind==="USB"){
+      if(!("serial" in navigator)){setStatus("This browser can't open the pedal's USB link — use Chrome or Edge on a computer","err");return;}
+      link=new SerialLink(await navigator.serial.requestPort({filters:[{usbVendorId:0x2b5a}]}));
+    }else{
+      if(!navigator.bluetooth){setStatus("This browser has no Web Bluetooth — use Chrome or Edge on a computer","err");return;}
+      const dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:"UAFX"},{manufacturerData:[{companyIdentifier:UA_BT_COMPANY}]}],optionalServices:[BLE_SERVICE]});
+      setStatus(`Connecting to ${dev.name||"pedal"} over Bluetooth…`);
+      dev.addEventListener("gattserverdisconnected",()=>{if(uanet?.link.device===dev){log("Bluetooth disconnected");disconnectLink();}});
+      link=new BleLink(dev);
+    }
+    const u=new UANet(link);await u.open();uanet=u;
+    $("live").hidden=false;$(kind==="USB"?"serialBtn":"bleBtn").textContent="Disconnect";
+    setStatus(`Linked over ${link.name} — every control, Rig settings included, now changes the pedal live`,"ok");
+    log(`Linked to the pedal over ${link.name}`);pollLive();
+    try{rigPaths=await discoverRig(u);log(`Reading ${Object.keys(rigPaths).length} Rig settings from the pedal`);}catch(e){log("Couldn't read Rig settings: "+e.message);}
+  }catch(e){if(e.name!=="NotFoundError")setStatus(`Couldn't link to the pedal over ${kind}: `+e.message,"err");}
 }
-$("serialBtn").onclick=connectSerial;
+$("serialBtn").onclick=()=>connectLink("USB");
+$("bleBtn").onclick=()=>connectLink("Bluetooth");
 if(!("serial" in navigator))$("serialBtn").style.display="none";
+if(!navigator.bluetooth)$("bleBtn").style.display="none";
+// Live writes, latest value wins per path so a dragged slider doesn't queue up a backlog
+const writing=new Map();
+async function writePath(path,value,port){
+  if(writing.has(path)){writing.set(path,{value,port});return;}
+  writing.set(path,null);
+  try{for(let next={value,port};next;next=writing.get(path),writing.set(path,null)){
+    try{await uanet?.set(path,next.value,next.port);}catch(e){log(`Write failed: ${path.split("/").slice(-3,-2)} — ${e.message}`);}}}
+  finally{writing.delete(path);}
+}
+// A control changed: write it live when linked, otherwise send its MIDI CC
+function sendParam(p,label){
+  const w=uanet?liveWrites(p,state[p.id],state):[];
+  if(w.length){for(const[path,v,port]of w)writePath(path,v,port);log(`Set ${label}`);return;}
+  if(!p.nomidi)sendCC(p.cc,state[p.id],label);
+}
 
 build();applyLinks();paintAll();refreshSnaps();
 // Inside the iPhone app: connect automatically and hide the Connect button — just plug in the pedal
