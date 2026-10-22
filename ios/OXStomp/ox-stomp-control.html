@@ -34,7 +34,12 @@ section{background:var(--panel);border:1px solid var(--line);border-radius:14px;
 section h2{margin:0 0 10px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
 .row{display:grid;grid-template-columns:110px 1fr 76px;gap:8px;align-items:center;margin:8px 0}
 .row label{color:var(--muted);font-size:13px}
-.row .val{text-align:right;font-variant-numeric:tabular-nums;font-size:13px}
+.row .val{text-align:right;font-variant-numeric:tabular-nums;font-size:13px;width:100%;box-sizing:border-box;
+  background:transparent;color:var(--text);border:1px solid transparent;border-radius:6px;padding:3px 5px;font-family:inherit}
+.row input.val{text-decoration:underline dotted var(--muted);text-underline-offset:3px;cursor:text}
+.row .val:hover{border-color:var(--line)}
+.row input.val:focus{text-decoration:none}
+.row .val:focus{outline:none;border-color:var(--accent);background:var(--bg)}
 .row select{width:100%}
 input[type=range]{width:100%;accent-color:var(--accent)}
 .toggles{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
@@ -245,8 +250,38 @@ const UNITS = {
   hiCut:v=>v>=127?"off":hz(20*Math.pow(1000,v/127)),
   loCut:v=>v<=0?"off":hz(20*Math.pow(800,v/127)),
 };
+// ---- Typed values: every slider's value box takes a value in plain units ("350 ms", "1.2 s", "-3 dB", "L20", "off") ----
+// One number in the display's base unit: "1.2 s" → 1200 (ms), "4k" / "4 kHz" → 4000 (Hz), "L20" → -20
+function parseVal(t){t=String(t).trim().replace(/^≈/,"");if(/^c(entre|enter)?$/i.test(t))return 0;
+  const m=t.match(/^([LR])?\s*([-+]?\d*\.?\d+)\s*(khz|k|ms|µs|us|s|hz)?/i);if(!m)return null;
+  let n=parseFloat(m[2]);const u=(m[3]||"").toLowerCase();
+  if((m[1]||"").toUpperCase()==="L")n=-n;if(u==="s"||u==="k"||u==="khz")n*=1000;return n;}
+// Page value (0–127) whose estimated display is closest to the typed text; null if it can't be read
+function fromText(p,t){
+  if(/^off$/i.test(t.trim())){for(const v of[0,127])if(fmt(p,v)==="off")return v;return null;}
+  const want=parseVal(t);if(want==null)return null;let best=null,err=Infinity;
+  for(let v=0;v<=127;v+=0.05){const g=parseVal(fmt(p,v));if(g!=null&&Math.abs(g-want)<err){err=Math.abs(g-want);best=v;}}
+  return best;}
+// Linked: hand the text to the pedal, which parses it like UA's own plugin UIs do (their setStringValue writes
+// <control>/string_value), then show what the pedal made of it. Otherwise, or if the pedal refuses, use the estimate.
+async function typeValue(p,t){
+  const label=`${p.label} = ${t}`;
+  if(uanet&&!/^off$/i.test(t.trim())){
+    const w=liveWrites(p,64,state).filter(([path])=>path.endsWith("/normalized_value/value"));
+    if(w.length)try{
+      for(const[path,v,port]of w)await uanet.set(/_enable\/normalized_value/.test(path)?path:path.replace(/normalized_value\/value$/,"string_value/value"),/_enable\//.test(path)?1:t.trim(),port);
+      const ctl=w.find(([path])=>!/_enable\//.test(path))[0].replace(/\/normalized_value\/value$/,"");
+      const pr=(await uanet.get(ctl,DEVICED_PORT,true)).properties;
+      state[p.id]=Number(pr.normalized_value.value)*127;liveText[p.id]=String(pr.string_value.value).trim();
+      log(`Set ${label} → pedal: ${liveText[p.id]}`);applyLinks();paint(p);return;
+    }catch(e){log(`Pedal didn't take "${t}" (${e.message}) — using the estimate`);}
+  }
+  const v=fromText(p,t);
+  if(v==null){log(`Couldn't read "${t}" as a value for ${p.label}`);paint(p);return;}
+  state[p.id]=uanet?v:Math.round(v);delete liveText[p.id];sendParam(p,label);applyLinks();paint(p);
+}
 function fmt(p,v){
-  if(p.pan){const d=v-64;return d===0?"C":(d<0?"L"+(-d):"R"+d);}
+  if(p.pan){const d=Math.round(v-64);return d===0?"C":(d<0?"L"+(-d):"R"+d);}
   if(p.unit){const t=UNITS[p.unit](v);return (p.exact||t==="off"?"":"≈")+t;}
   return v;
 }
@@ -306,7 +341,13 @@ function build(){
       const row=document.createElement("div");row.className="row";
       if(p.nomidi)row.classList.add("nomidi");
       const lab=document.createElement("label");lab.innerHTML=`${p.label}${tag(p)}`;
-      const val=document.createElement("span");val.className="val";
+      const val=document.createElement(p.type==="select"?"span":"input");val.className="val";
+      if(p.type!=="select"){val.type="text";val.spellcheck=false;val.title="Type a value — e.g. 350 ms, 1.2 s, -3 dB, 40%, L20, off — then Enter";
+        val.onfocus=()=>val.select();
+        val.onkeydown=e=>{if(e.key==="Enter")val.blur();if(e.key==="Escape"){val.dataset.cancel=1;val.blur();}};
+        val.onchange=()=>{if(val.dataset.cancel){delete val.dataset.cancel;paint(p);return;}
+          if(p.linkKey&&state[p.linkKey]){paint(p);return;}typeValue(p,val.value);};
+        val.onblur=()=>{if(val.dataset.cancel){delete val.dataset.cancel;paint(p);}};}
       let ctl;
       if(p.type==="select"){
         ctl=document.createElement("select");
@@ -317,7 +358,7 @@ function build(){
         let last=null;
         ctl.oninput=()=>{
           if(p.linkKey&&state[p.linkKey]){paint(p);return;} // follower locked while linked
-          state[p.id]=Number(ctl.value);val.textContent=fmt(p,state[p.id]);
+          state[p.id]=Number(ctl.value);delete liveText[p.id];val.value=fmt(p,state[p.id]);
           if(state[p.id]!==last){last=state[p.id];sendParam(p,`${s.title} ${p.label}`);}
           applyLinks();};
         ctl.ondblclick=()=>{state[p.id]=p.def;paint(p);sendParam(p,`${s.title} ${p.label} (reset)`);applyLinks();};
@@ -393,7 +434,7 @@ function renderRigs(){
 function paint(p){
   const u=ui[p.id],v=state[p.id];
   if(p.type==="toggle"){u.classList.toggle("on",!!v);return;}
-  u.ctl.value=v;u.val.textContent=p.type==="select"?"":(liveText[p.id]??fmt(p,v));
+  u.ctl.value=v;if(p.type!=="select"&&document.activeElement!==u.val)u.val.value=liveText[p.id]??fmt(p,v);
   if(p.linkKey){const locked=!!state[p.linkKey];u.ctl.disabled=locked;u.ctl.title=locked?"Linked — turn off the link to adjust separately":"";}
 }
 function paintBypass(){document.querySelectorAll("#byp button").forEach(b=>b.classList.toggle("on",Number(b.dataset.v)===state.bypass));}
@@ -596,8 +637,8 @@ async function readRigParam(u,id){
   const{props}=await u.node(r.path);norm=props.normalized_value;text=String(props.string_value??"").trim();
   if(r.en&&!((await u.node(r.en)).props.normalized_value>=.5)){norm=r.o.offAt/127;text="off";}
   if(norm==null)return;
-  const v=P.type==="toggle"?(norm>=.5?1:0):P.type==="select"?Math.round(norm*(P.options.length-1)):Math.round(norm*127);
-  const u_=ui[id];if(u_?.ctl&&document.activeElement===u_.ctl)return; // don't fight a control being dragged
+  const v=P.type==="toggle"?(norm>=.5?1:0):P.type==="select"?Math.round(norm*(P.options.length-1)):norm*127;
+  const u_=ui[id];if(u_?.ctl&&(document.activeElement===u_.ctl||document.activeElement===u_.val))return; // don't fight a control being dragged or typed in
   state[id]=v;if(text&&!r.o.fmt)liveText[id]=text;else delete liveText[id];paint(P);
 }
 function ledColor(v){const u=v>>>0,r=u>>>24,g=(u>>>16)&255,b=(u>>>8)&255;return r|g|b?`rgb(${r},${g},${b})`:"";}

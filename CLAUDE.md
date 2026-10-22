@@ -77,6 +77,11 @@ modeled on UA's UAFX Control app. Jay is an electrical engineer (embedded / ESP3
 - Only one USB host at a time; UAFX Control over Bluetooth can stay connected.
 - iOS browsers (Safari *and* Chrome on iOS) have no Web MIDI — the web page alone can't reach the pedal on iPhone.
 
+- **Type-in values (2026-10-21):** the value next to each slider is an `<input class="val">` — click, type
+  ("350 ms", "1.2 s", "-3 dB", "40%", "L20", "4k", "off"), Enter. Linked: `typeValue` SETs `<control>/string_value/value`
+  on deviced (UA's plugin UIs set string_value too) and reads back normalized + string; on error falls back to
+  `fromText` (inverse of the ≈ estimate curves; MIDI-only snaps to 128 steps). Pedal-side parsing not yet verified.
+
 ## OX Stomp MIDI CC map (UA OX Stomp manual, fw 2.0)
 7 Output · 12 FS Left (manual says 1 = press; pedal needs 127, page sends 127 then 0) · 13 FS Right (same) · 19 Bypass (0 bypass, 1 L FS, 2 R FS) · 20 Cab (0–21) ·
 21 Speaker Drive · 22 Mic1 model (0–6) · 23 Mic1 Vol · 24 Mic1 Pan · 25 Mic1 Mute · 26 Mic1 Axis (0 off, 1 on) ·
