@@ -42,6 +42,11 @@ section h2{margin:0 0 10px;font-size:13px;letter-spacing:.12em;text-transform:up
 .row .val:focus{outline:none;border-color:var(--accent);background:var(--bg)}
 .row select{width:100%}
 input[type=range]{width:100%;accent-color:var(--accent)}
+dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:14px;padding:16px;max-width:380px;width:calc(100% - 32px)}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+dialog h2{margin:0 0 8px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+dialog select{width:100%;margin:6px 0}
+dialog .bar{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
 .ends{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:-2px;line-height:1}
 .toggles{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .toggles button{font-size:13px;padding:6px 10px}
@@ -93,6 +98,16 @@ input[type=range]:disabled{opacity:.45}
     <input id="importFile" type="file" accept=".json" hidden>
   </div>
 </header>
+<dialog id="saveDlg">
+  <form method="dialog">
+    <h2>Save to Rig</h2>
+    <p class="note">Stores the pedal's current sound — everything you've changed while linked — in the Rig you pick.
+      That Rig's stored sound is replaced.</p>
+    <select id="saveRigSel"></select>
+    <p class="note" id="saveRigNote"></p>
+    <div class="bar"><button value="cancel">Cancel</button><button value="save" class="primary" id="saveRigOk">Save</button></div>
+  </form>
+</dialog>
 <main id="main"></main>
 
 <script>
@@ -750,18 +765,37 @@ async function findPresetFolder(uid){
 async function post(path,data,port=DEVICED_PORT){
   const r=await uanet.req({action:3,pathId:await uanet.pathId(path,port),data,params:pbB(10,pbS("_promise_post"))});
   if(r.error)throw new Error(r.error);return r.data;}
+const RIG_SLOTS=6; // rig_uid_1…6 in UAFX Control's Rig sets
 async function saveRig(){
   if(!uanet){setStatus("Click USB link first — saving to the pedal needs the link","err");return;}
   try{
-    const idx=Number(await uanet.get("/panel/emperor_state/current_rig_index/value")),uid=plain(await uanet.get(`/panel/emperor_state/rig_uid_${idx+1}/value`));
-    if(!uid)throw new Error("the pedal didn't say which Rig it's on");
-    if(FACTORY_RIGS.includes(uid)){setStatus(`Rig ${idx+1} is a UA factory Rig — it can't be overwritten. Use Save Copy in UAFX Control`,"err");return;}
-    const base=await findPresetFolder(uid),name=String(plain(await uanet.get(`${base}/presets/${uid}/preset_name`,DEVICED_PORT,true))??"");
-    if(!confirm(`Save the pedal's current sound into Rig ${idx+1} "${name}"?\n\nThis replaces what's stored in that Rig.`))return;
-    await post(`${base}/save`,{preset_uid:uid,session_uid:OX_SESSION,outputs:true});
-    await uanet.set("/panel/emperor_state/current_preset_modified/value",false,UANET_PORT);
-    try{await post(`${base}/delete_modified`,{uid});}catch(e){log("delete_modified: "+e.message);}
-    setStatus(`Saved to Rig ${idx+1} "${name}"`,"ok");log(`Saved the pedal's sound to Rig ${idx+1} "${name}" (${uid})`);
+    const cur=Number(await uanet.get("/panel/emperor_state/current_rig_index/value"))+1,rigs=[];
+    for(let i=1;i<=RIG_SLOTS;i++){let uid="";try{uid=String(plain(await uanet.get(`/panel/emperor_state/rig_uid_${i}/value`))||"");}catch{}rigs.push({i,uid});}
+    const known=rigs.find(r=>r.i===cur&&r.uid)||rigs.find(r=>r.uid);if(!known)throw new Error("the pedal didn't report its Rigs");
+    const base=await findPresetFolder(known.uid);
+    for(const r of rigs)if(r.uid)try{r.name=String(plain(await uanet.get(`${base}/presets/${r.uid}/preset_name`,DEVICED_PORT,true))??"");}catch{r.name="?";}
+    // Ask which Rig: current one preselected; UA factory Rigs can't be overwritten (the app saves a copy instead)
+    const sel=$("saveRigSel");sel.innerHTML="";
+    for(const r of rigs){const same=rigs.filter(q=>q.uid&&q.uid===r.uid&&q.i!==r.i).map(q=>q.i);
+      r.same=same;
+      const o=new Option(`Rig ${r.i} · ${r.uid?r.name||"(no name)":"empty"}${r.i===cur?" (current)":FACTORY_RIGS.includes(r.uid)?" (factory)":""}`,r.i);
+      o.disabled=!r.uid||FACTORY_RIGS.includes(r.uid);sel.add(o);}
+    sel.value=String(cur);if(sel.selectedOptions[0]?.disabled)sel.value=String(rigs.find(r=>r.uid&&!FACTORY_RIGS.includes(r.uid))?.i??"");
+    const note=()=>{const r=rigs[Number(sel.value)-1];$("saveRigNote").textContent=!r?"No Rig can be saved to":
+      (r.i===cur?`Rig ${r.i} is the one the pedal is on.`:`The pedal stays on Rig ${cur}; Rig ${r.i} "${r.name}" gets this sound.`)+
+      (r.same.length?` Rig ${r.same.join(", ")} uses the same stored sound, so ${r.same.length>1?"they change":"it changes"} too.`:"")+
+      (rigs.some(q=>FACTORY_RIGS.includes(q.uid))?" UA factory Rigs can't be overwritten.":"");
+      $("saveRigOk").disabled=!r;};
+    sel.onchange=note;note();
+    const dlg=$("saveDlg");dlg.returnValue="";dlg.showModal();
+    await new Promise(res=>dlg.addEventListener("close",res,{once:true}));
+    if(dlg.returnValue!=="save")return;
+    const r=rigs[Number(sel.value)-1];if(!r?.uid||FACTORY_RIGS.includes(r.uid))return;
+    await post(`${base}/save`,{preset_uid:r.uid,session_uid:OX_SESSION,outputs:true});
+    if(r.i===cur){ // saved the active Rig: no longer "edited"
+      await uanet.set("/panel/emperor_state/current_preset_modified/value",false,UANET_PORT);
+      try{await post(`${base}/delete_modified`,{uid:r.uid});}catch(e){log("delete_modified: "+e.message);}}
+    setStatus(`Saved to Rig ${r.i} "${r.name}"`,"ok");log(`Saved the pedal's sound to Rig ${r.i} "${r.name}" (${r.uid})`);
   }catch(e){setStatus("Couldn't save the Rig: "+e.message,"err");log(`Save to Rig failed: ${e.message}`);}
 }
 $("saveRigBtn").onclick=saveRig;

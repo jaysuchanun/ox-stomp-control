@@ -97,7 +97,9 @@ modeled on UA's UAFX Control app. Jay is an electrical engineer (embedded / ESP3
   `<folder>/save` `{preset_uid, session_uid:"81f8e32f…", outputs:true}`, then SET paneld `current_preset_modified` false and
   POST `<folder>/delete_modified` `{uid}`. `<folder>` = the `/presets/devices/<x>` that has `presets/<uid>/preset_name`
   (the app reads it from config; the page searches). UA's factory preset UIDs (`FACTORY_RIGS`, from deviced-client.js) are
-  refused, as the app does. Asks for confirmation. Checked against a simulated pedal only — not yet on the real one.
+  refused, as the app does. A dialog lists Rig 1–6 (`rig_uid_1…6`, names from `preset_name`; current preselected; factory
+  and empty slots disabled; warns when Rigs share one stored sound) — saving to another Rig posts that Rig's uid and
+  leaves the pedal where it is (modified flag only cleared for the current Rig). Simulated pedal only — not yet real.
 
 ## OX Stomp MIDI CC map (UA OX Stomp manual, fw 2.0)
 7 Output · 12 FS Left (manual says 1 = press; pedal needs 127, page sends 127 then 0) · 13 FS Right (same) · 19 Bypass (0 bypass, 1 L FS, 2 R FS) · 20 Cab (0–21) ·
