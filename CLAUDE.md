@@ -78,9 +78,12 @@ modeled on UA's UAFX Control app. Jay is an electrical engineer (embedded / ESP3
 - iOS browsers (Safari *and* Chrome on iOS) have no Web MIDI — the web page alone can't reach the pedal on iPhone.
 
 - **Type-in values (2026-10-21):** the value next to each slider is an `<input class="val">` — click, type
-  ("350 ms", "1.2 s", "-3 dB", "40%", "L20", "4k", "off"), Enter. Linked: `typeValue` SETs `<control>/string_value/value`
-  on deviced (UA's plugin UIs set string_value too) and reads back normalized + string; on error falls back to
-  `fromText` (inverse of the ≈ estimate curves; MIDI-only snaps to 128 steps). Pedal-side parsing not yet verified.
+  ("369 ms", "1.2 s", "-3 dB", "40%", "L20", "4k", "off"), Enter. Don't SET `string_value`: on Jay's pedal "369ms" went
+  to 2.37 s (it doesn't parse units). Linked, `typeValue` → `seekPedal`: set normalized (page estimate first), read
+  back the pedal's `string_value`, regula falsi until it matches to the display's last digit (≤ 10 steps). A bare
+  number is read in the pedal's displayed unit; a unit the pedal doesn't show (µs on the 1176's 1–7 knob) uses the
+  ≈ estimate. Not linked: `fromText` inverts the ≈ curves (snaps to 128 MIDI steps). Seek tested against a simulated
+  pedal only; pedal shows 1176 input/output/attack/release as bare numbers and delay Feedback as "1.4 s" — unchecked.
 
 ## OX Stomp MIDI CC map (UA OX Stomp manual, fw 2.0)
 7 Output · 12 FS Left (manual says 1 = press; pedal needs 127, page sends 127 then 0) · 13 FS Right (same) · 19 Bypass (0 bypass, 1 L FS, 2 R FS) · 20 Cab (0–21) ·

@@ -255,26 +255,60 @@ const UNITS = {
 function parseVal(t){t=String(t).trim().replace(/^≈/,"");if(/^c(entre|enter)?$/i.test(t))return 0;
   const m=t.match(/^([LR])?\s*([-+]?\d*\.?\d+)\s*(khz|k|ms|µs|us|s|hz)?/i);if(!m)return null;
   let n=parseFloat(m[2]);const u=(m[3]||"").toLowerCase();
-  if((m[1]||"").toUpperCase()==="L")n=-n;if(u==="s"||u==="k"||u==="khz")n*=1000;return n;}
+  if((m[1]||"").toUpperCase()==="L"||/\dL$/i.test(t.replace(/\s/g,"")))n=-n;if(u==="s"||u==="k"||u==="khz")n*=1000;return n;}
+// What kind of value a text is, so "369" can be read in the pedal's own unit and "100 µs" isn't compared with a knob number
+function unitOf(t){t=String(t).trim();
+  if(/(ms|µs|us)$|\d\s*s$/i.test(t))return"time";if(/hz$|\d\s*k$/i.test(t))return"freq";if(/db$/i.test(t))return"db";
+  if(/%/.test(t))return"pct";if(/^[LR]\s*\d|\d\s*[LR]$|^c$/i.test(t))return"pan";return"";}
 // Page value (0–127) whose estimated display is closest to the typed text; null if it can't be read
 function fromText(p,t){
   if(/^off$/i.test(t.trim())){for(const v of[0,127])if(fmt(p,v)==="off")return v;return null;}
   const want=parseVal(t);if(want==null)return null;let best=null,err=Infinity;
   for(let v=0;v<=127;v+=0.05){const g=parseVal(fmt(p,v));if(g!=null&&Math.abs(g-want)<err){err=Math.abs(g-want);best=v;}}
   return best;}
-// Linked: hand the text to the pedal, which parses it like UA's own plugin UIs do (their setStringValue writes
-// <control>/string_value), then show what the pedal made of it. Otherwise, or if the pedal refuses, use the estimate.
+// Linked: the pedal's display is the truth (its curves aren't published, and it doesn't parse "369ms" the way you'd
+// hope — it went to 2.37 s). So set the control, read back the pedal's own text, and home in on the typed value:
+// start from the page's estimate, then regula falsi (Illinois) on the normalized value, ≤ 10 steps of a few ms each.
+// The deviced control behind page control p, and its current {n: normalized, s: pedal's display text}
+const ctlPath=p=>liveWrites(p,64,state).map(w=>w[0]).find(x=>!/_enable\//.test(x)).replace(/\/normalized_value\/value$/,"");
+async function readCtl(ctl){const pr=(await uanet.get(ctl,DEVICED_PORT,true)).properties;return{n:+pr.normalized_value.value,s:String(pr.string_value.value).trim()};}
+async function seekPedal(p,want){
+  const ctl=ctlPath(p),read=()=>readCtl(ctl);
+  const put=async n=>{for(const[path,v,port]of liveWrites(p,n*127,state))await uanet.set(path,v,port);return read();};
+  // half a step of the pedal's display ("420 ms" → 0.5 ms, "1.9 s" → 50 ms)
+  const tol=t=>{const m=t.match(/\d+(?:\.(\d+))?/);return m?0.5*10**-(m[1]?.length??0)*(/\d\s*(s|k|khz)$/i.test(t)?1000:1)+1e-9:0;};
+  let lo={n:0,f:-Infinity},hi={n:1,f:Infinity},best=null,side=0;
+  const take=r=>{const g=parseVal(r.s),f=(g==null?(r.n<.5?-Infinity:Infinity):g-want);const q={...r,f};
+    if(f<=0&&r.n>=lo.n){lo=q;if(side===-1)hi.f/=2;side=-1;}if(f>=0&&r.n<=hi.n){hi=q;if(side===1)lo.f/=2;side=1;}
+    if(!best||Math.abs(f)<Math.abs(best.f))best=q;return q;};
+  take(await read());
+  const est=fromText(p,want+"")??(state[p.id]??64);
+  let r=take(await put(Math.min(1,Math.max(0,est/127))));
+  for(let k=0;k<10&&Math.abs(best.f)>tol(best.s);k++){
+    let n=isFinite(lo.f)&&isFinite(hi.f)&&hi.f!==lo.f?lo.n+(hi.n-lo.n)*(-lo.f)/(hi.f-lo.f):(lo.n+hi.n)/2;
+    if(!(n>lo.n&&n<hi.n))n=(lo.n+hi.n)/2;if(hi.n-lo.n<1e-5)break;
+    r=take(await put(n));}
+  if(r.n!==best.n)await put(best.n);
+  return best;
+}
 async function typeValue(p,t){
-  const label=`${p.label} = ${t}`;
-  if(uanet&&!/^off$/i.test(t.trim())){
-    const w=liveWrites(p,64,state).filter(([path])=>path.endsWith("/normalized_value/value"));
-    if(w.length)try{
-      for(const[path,v,port]of w)await uanet.set(/_enable\/normalized_value/.test(path)?path:path.replace(/normalized_value\/value$/,"string_value/value"),/_enable\//.test(path)?1:t.trim(),port);
-      const ctl=w.find(([path])=>!/_enable\//.test(path))[0].replace(/\/normalized_value\/value$/,"");
-      const pr=(await uanet.get(ctl,DEVICED_PORT,true)).properties;
-      state[p.id]=Number(pr.normalized_value.value)*127;liveText[p.id]=String(pr.string_value.value).trim();
-      log(`Set ${label} → pedal: ${liveText[p.id]}`);applyLinks();paint(p);return;
-    }catch(e){log(`Pedal didn't take "${t}" (${e.message}) — using the estimate`);}
+  t=t.trim();const label=`${p.label} = ${t}`;
+  if(uanet&&!/^off$/i.test(t)&&liveWrites(p,64,state).length){
+    try{
+      const now=(await readCtl(ctlPath(p))).s,tu=unitOf(t),pu=unitOf(now);
+      // A bare number is read in the pedal's displayed unit: "369" → ms, "2" on a "1.9 s" control → s, "4" on "5.85 k" → kHz
+      let want=parseVal(t);
+      if(want!=null&&!tu&&pu==="time"&&/\d\s*s$/.test(now)&&want<=10)want*=1000;
+      if(want!=null&&!tu&&pu==="freq"&&/k$/i.test(now)&&want<=25)want*=1000;
+      // Typed in a unit the pedal doesn't show here (e.g. µs on the 1176's 1–7 knob) → page estimate, no seeking
+      const comparable=!tu||tu===pu||(tu==="db"&&!pu);
+      if(want!=null&&comparable){
+        const b=await seekPedal(p,want);
+        state[p.id]=b.n*127;liveText[p.id]=b.s;applyLinks();paint(p);
+        const miss=Math.abs(b.f)>0.03*Math.abs(want)+1e-6;
+        log(`Set ${label} → pedal: ${b.s}`+(miss?" (closest the pedal goes)":""));
+        setStatus(`${p.label}: ${b.s}`+(miss?` — closest to ${t} the pedal goes`:""),miss?"err":"ok");return;}
+    }catch(e){log(`Couldn't set ${label} on the pedal (${e.message}) — using the estimate`);}
   }
   const v=fromText(p,t);
   if(v==null){log(`Couldn't read "${t}" as a value for ${p.label}`);paint(p);return;}
